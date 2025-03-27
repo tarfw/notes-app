@@ -1,17 +1,12 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  Pressable,
-} from 'react-native';
+import React from 'react';
+import { View, StyleSheet, TextInput, FlatList, Pressable } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Plus, Search, X } from 'lucide-react-native';
 import { SwipeableNote } from '../components/SwipeableNote';
 import { useNotes } from '../context/NotesContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function NotesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,64 +24,55 @@ export default function NotesScreen() {
     router.push(`/note/${newNote.id}`);
   };
 
-  const renderNote = ({ item }) => (
+  const renderNote = ({ item }: any) => (
     <SwipeableNote
       note={item}
       onPress={() => router.push(`/note/${item.id}`)}
       onDelete={() => deleteNote(item.id)}
     />
   );
-
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Notes</Text>
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#8E8E93" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')}>
-              <X size={20} color="#8E8E93" />
-            </Pressable>
-          )}
-        </View>
-      </View>
-      <Animated.View entering={FadeIn} style={styles.notesList}>
-        <FlatList
-          data={filteredNotes}
-          renderItem={renderNote}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-        />
-      </Animated.View>
+    <Animated.View entering={FadeIn} style={styles.notesList}>
+      <FlatList
+        data={filteredNotes}
+        renderItem={renderNote}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={() => (
+          <View style={styles.headerContainer}>
+            <View style={styles.searchContainer}>
+              <Search size={20} color="#8E8E93" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => setSearchQuery('')}>
+                  <X size={20} color="#8E8E93" />
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+        contentContainerStyle={styles.listContent}
+        contentInsetAdjustmentBehavior="automatic"
+      />
       <Pressable style={styles.fab} onPress={handleCreateNote}>
         <Plus size={24} color="#FFFFFF" />
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 10,
-    backgroundColor: '#F2F2F7',
-  },
   title: {
     fontSize: 34,
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 10,
+  },
+  headerContainer: {
+    paddingHorizontal: 16,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -95,6 +81,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 8,
     height: 36,
+    marginVertical: 16,
   },
   searchIcon: {
     marginRight: 6,
@@ -108,13 +95,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: 16,
     paddingBottom: 100, // Extra padding for FAB
   },
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: 32,
     width: 56,
     height: 56,
     borderRadius: 28,

@@ -16,7 +16,14 @@ export default function RootLayout() {
             gestureEnabled: true,
           }}
         >
-          <Stack.Screen name="index" />
+          <Stack.Screen
+            name="index"
+            options={{
+              headerShown: true,
+              headerLargeTitle: true,
+              headerTitle: 'Notes',
+            }}
+          />
           <Stack.Screen name="note/[id]" />
         </Stack>
       </GestureHandlerRootView>
