@@ -4,6 +4,10 @@ import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeabl
 import Reanimated, {
   SharedValue,
   useAnimatedStyle,
+  FadeIn,
+  FadeOut,
+  Layout,
+  LinearTransition,
 } from 'react-native-reanimated';
 import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react-native';
@@ -46,36 +50,44 @@ export function SwipeableNote({ note, onPress, onDelete }: Props) {
   };
 
   return (
-    <ReanimatedSwipeable
-      key={note.id}
-      friction={2}
-      enableTrackpadTwoFingerGesture
-      rightThreshold={40}
-      renderRightActions={RightAction}
-      overshootRight={false}
-      enableContextMenu
-      containerStyle={{
-        paddingBottom: 12,
-        paddingHorizontal: 16,
-      }}
+    <Reanimated.View
+      entering={FadeIn.duration(300).springify()}
+      exiting={FadeOut.duration(200)}
+      layout={LinearTransition}
     >
-      <Pressable
-        onPress={() => {
-          onPress();
+      <ReanimatedSwipeable
+        key={note.id}
+        friction={2}
+        enableTrackpadTwoFingerGesture
+        rightThreshold={40}
+        renderRightActions={RightAction}
+        overshootRight={false}
+        enableContextMenu
+        containerStyle={{
+          paddingBottom: 12,
+          paddingHorizontal: 16,
         }}
-        style={styles.swipeable}
       >
-        <View style={styles.content}>
-          <Text style={styles.noteTitle}>{note.title || 'Untitled Note'}</Text>
-          <Text style={styles.noteDate}>
-            {format(note.modifiedDate, 'MMM d, yyyy')}
-          </Text>
-          <Text style={styles.notePreview} numberOfLines={2}>
-            {note.content || 'No additional text'}
-          </Text>
-        </View>
-      </Pressable>
-    </ReanimatedSwipeable>
+        <Pressable
+          onPress={() => {
+            onPress();
+          }}
+          style={styles.swipeable}
+        >
+          <View style={styles.content}>
+            <Text style={styles.noteTitle}>
+              {note.title || 'Untitled Note'}
+            </Text>
+            <Text style={styles.noteDate}>
+              {format(note.modifiedDate, 'MMM d, yyyy')}
+            </Text>
+            <Text style={styles.notePreview} numberOfLines={2}>
+              {note.content || 'No additional text'}
+            </Text>
+          </View>
+        </Pressable>
+      </ReanimatedSwipeable>
+    </Reanimated.View>
   );
 }
 
