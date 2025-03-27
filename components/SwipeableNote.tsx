@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, LogBox } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   SharedValue,
@@ -11,6 +11,8 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react-native';
+
+LogBox.ignoreAllLogs(); // YOLO
 
 interface Note {
   id: string;
