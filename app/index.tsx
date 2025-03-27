@@ -1,17 +1,24 @@
 import React from 'react';
-import { View, StyleSheet, TextInput, FlatList, Pressable } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  FlatList,
+  Pressable,
+  Switch,
+  Text,
+} from 'react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Plus, Search, X } from 'lucide-react-native';
 import { SwipeableNote } from '../components/SwipeableNote';
 import { useNotes } from '../context/NotesContext';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function NotesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
-  const { notes, createNote, deleteNote } = useNotes();
+  const { notes, createNote, deleteNote, isSyncing, toggleSync } = useNotes();
 
   const filteredNotes = notes.filter(
     (note) =>
@@ -32,38 +39,62 @@ export default function NotesScreen() {
     />
   );
   return (
-    <Animated.View entering={FadeIn} style={styles.notesList}>
-      <FlatList
-        data={filteredNotes}
-        renderItem={renderNote}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={() => (
-          <View style={styles.headerContainer}>
-            <View style={styles.searchContainer}>
-              <Search size={20} color="#8E8E93" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
+    <>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+              }}
+            >
+              <Text style={{ fontSize: 16 }}>Sync</Text>
+              <Switch
+                value={isSyncing}
+                onValueChange={() => {
+                  toggleSync(!isSyncing);
+                }}
               />
-              {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')}>
-                  <X size={20} color="#8E8E93" />
-                </Pressable>
-              )}
             </View>
-          </View>
-        )}
-        contentContainerStyle={styles.listContent}
-        contentInsetAdjustmentBehavior="automatic"
+          ),
+        }}
       />
-      <Pressable style={styles.fab} onPress={handleCreateNote}>
-        <Plus size={24} color="#FFFFFF" />
-      </Pressable>
-    </Animated.View>
+      <Animated.View entering={FadeIn} style={styles.notesList}>
+        <FlatList
+          data={filteredNotes}
+          renderItem={renderNote}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={() => (
+            <View style={styles.headerContainer}>
+              <View style={styles.searchContainer}>
+                <Search size={20} color="#8E8E93" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <Pressable onPress={() => setSearchQuery('')}>
+                    <X size={20} color="#8E8E93" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
+          contentContainerStyle={styles.listContent}
+          contentInsetAdjustmentBehavior="automatic"
+        />
+        <Pressable style={styles.fab} onPress={handleCreateNote}>
+          <Plus size={24} color="#FFFFFF" />
+        </Pressable>
+      </Animated.View>
+    </>
   );
 }
+
 const styles = StyleSheet.create({
   title: {
     fontSize: 34,

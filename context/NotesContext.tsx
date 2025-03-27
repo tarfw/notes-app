@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
 } from 'react';
 
 if (
@@ -32,44 +33,56 @@ interface NotesContextType {
   createNote: () => Note;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
+  syncNotes: () => void;
+  toggleSync: (enabled: boolean) => void;
+  isSyncing: boolean;
 }
-
-const initialNotes = [
-  {
-    id: '1',
-    title: 'Shopping List',
-    content: 'Milk, eggs, bread, fruits, vegetables',
-    modifiedDate: new Date('2024-01-20'),
-  },
-  {
-    id: '2',
-    title: 'Meeting Notes',
-    content: 'Discuss project timeline and deliverables',
-    modifiedDate: new Date('2024-01-19'),
-  },
-  {
-    id: '3',
-    title: 'Ideas',
-    content: 'New app features and improvements',
-    modifiedDate: new Date('2024-01-18'),
-  },
-];
 
 const NotesContext = createContext<NotesContextType | null>(null);
 
 export function NotesProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
   const [notes, setNotes] = useState<Note[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncIntervalRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     fetchNotes();
   }, [db]);
 
+  useEffect(() => {
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, []);
+
   const fetchNotes = useCallback(async () => {
     const notes = await db.getAllAsync<Note>('SELECT * FROM notes');
-    console.log('notes', notes);
     setNotes(notes);
   }, [db]);
+
+  const syncNotes = useCallback(async () => {
+    console.log('Syncing notes with Turso DB...');
+    db.syncLibSQL();
+    fetchNotes();
+  }, [db, fetchNotes]);
+
+  const toggleSync = useCallback(
+    (enabled: boolean) => {
+      setIsSyncing(enabled);
+      if (enabled) {
+        console.log('Starting sync interval...');
+        syncNotes(); // Sync immediately when enabled
+        syncIntervalRef.current = setInterval(syncNotes, 2000);
+      } else if (syncIntervalRef.current) {
+        console.log('Stopping sync interval...');
+        clearInterval(syncIntervalRef.current);
+      }
+    },
+    [syncNotes]
+  );
 
   const createNote = () => {
     const newNote = {
@@ -98,7 +111,15 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <NotesContext.Provider
-      value={{ notes, createNote, updateNote, deleteNote }}
+      value={{
+        notes,
+        createNote,
+        updateNote,
+        deleteNote,
+        syncNotes,
+        toggleSync,
+        isSyncing,
+      }}
     >
       {children}
     </NotesContext.Provider>

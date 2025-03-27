@@ -8,11 +8,13 @@ import Reanimated, {
   FadeOut,
   Layout,
   LinearTransition,
+  configureReanimatedLogger,
 } from 'react-native-reanimated';
 import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react-native';
 
 LogBox.ignoreAllLogs(); // YOLO
+configureReanimatedLogger({ strict: false }); // YOLO
 
 interface Note {
   id: string;
