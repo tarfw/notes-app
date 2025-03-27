@@ -1,4 +1,11 @@
-import { View, Text, StyleSheet, TextInput, FlatList, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  FlatList,
+  Pressable,
+} from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -11,9 +18,10 @@ export default function NotesScreen() {
   const router = useRouter();
   const { notes, createNote, deleteNote } = useNotes();
 
-  const filteredNotes = notes.filter(note => 
-    note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    note.content.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredNotes = notes.filter(
+    (note) =>
+      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      note.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCreateNote = () => {
@@ -48,13 +56,11 @@ export default function NotesScreen() {
           )}
         </View>
       </View>
-      <Animated.View
-        entering={FadeIn}
-        style={styles.notesList}>
+      <Animated.View entering={FadeIn} style={styles.notesList}>
         <FlatList
           data={filteredNotes}
           renderItem={renderNote}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
         />
       </Animated.View>
@@ -78,7 +84,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 34,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#000',
     marginBottom: 10,
   },
