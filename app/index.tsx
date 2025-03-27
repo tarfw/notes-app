@@ -15,8 +15,8 @@ export default function NotesScreen() {
 
   const filteredNotes = notes.filter(
     (note) =>
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content.toLowerCase().includes(searchQuery.toLowerCase())
+      note.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      note.content?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCreateNote = () => {

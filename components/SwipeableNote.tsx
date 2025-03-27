@@ -81,7 +81,7 @@ export function SwipeableNote({ note, onPress, onDelete }: Props) {
               {note.title || 'Untitled Note'}
             </Text>
             <Text style={styles.noteDate}>
-              {format(note.modifiedDate, 'MMM d, yyyy')}
+              {format(note.modifiedDate || new Date(), 'MMM d, yyyy')}
             </Text>
             <Text style={styles.notePreview} numberOfLines={2}>
               {note.content || 'No additional text'}

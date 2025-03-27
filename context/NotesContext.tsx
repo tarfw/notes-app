@@ -1,11 +1,31 @@
-import { createContext, useContext, useState } from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  modifiedDate: Date;
+if (
+  !process.env.EXPO_PUBLIC_TURSO_DB_URL ||
+  !process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN
+) {
+  throw new Error('Turso DB URL and Auth Token must be set in .env.local');
 }
+export interface Note {
+  id: string;
+  title: string | null;
+  content: string | null;
+  modifiedDate: Date | null;
+}
+
+export const DB_NAME = 'notes-app-db.db'; // Turso db name
+
+export const tursoOptions = {
+  url: process.env.EXPO_PUBLIC_TURSO_DB_URL,
+  authToken: process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN,
+};
 
 interface NotesContextType {
   notes: Note[];
@@ -38,7 +58,18 @@ const initialNotes = [
 const NotesContext = createContext<NotesContextType | null>(null);
 
 export function NotesProvider({ children }: { children: React.ReactNode }) {
-  const [notes, setNotes] = useState(initialNotes);
+  const db = useSQLiteContext();
+  const [notes, setNotes] = useState<Note[]>([]);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [db]);
+
+  const fetchNotes = useCallback(async () => {
+    const notes = await db.getAllAsync<Note>('SELECT * FROM notes');
+    console.log('notes', notes);
+    setNotes(notes);
+  }, [db]);
 
   const createNote = () => {
     const newNote = {
@@ -47,13 +78,13 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
       content: '',
       modifiedDate: new Date(),
     };
-    setNotes(prev => [newNote, ...prev]);
+    setNotes((prev) => [newNote, ...prev]);
     return newNote;
   };
 
   const updateNote = (id: string, updates: Partial<Note>) => {
-    setNotes(prev =>
-      prev.map(note =>
+    setNotes((prev) =>
+      prev.map((note) =>
         note.id === id
           ? { ...note, ...updates, modifiedDate: new Date() }
           : note
@@ -62,11 +93,13 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteNote = (id: string) => {
-    setNotes(prev => prev.filter(note => note.id !== id));
+    setNotes((prev) => prev.filter((note) => note.id !== id));
   };
 
   return (
-    <NotesContext.Provider value={{ notes, createNote, updateNote, deleteNote }}>
+    <NotesContext.Provider
+      value={{ notes, createNote, updateNote, deleteNote }}
+    >
       {children}
     </NotesContext.Provider>
   );

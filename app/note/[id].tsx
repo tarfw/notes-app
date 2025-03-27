@@ -2,28 +2,39 @@ import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Share2 } from 'lucide-react-native';
-import { useNotes } from '../../context/NotesContext';
+import { Note, useNotes } from '../../context/NotesContext';
+import { useSQLiteContext } from 'expo-sqlite';
 
 export default function NoteScreen() {
   const { id } = useLocalSearchParams();
+  const db = useSQLiteContext();
   const router = useRouter();
   const { notes, updateNote } = useNotes();
   const [note, setNote] = useState({ title: '', content: '' });
 
   useEffect(() => {
-    const currentNote = notes.find(n => n.id === id);
-    if (currentNote) {
-      setNote({ title: currentNote.title, content: currentNote.content });
-    }
+    const fetchNote = async () => {
+      const currentNote = await db.getFirstAsync<Note>(
+        'SELECT * FROM notes WHERE id = ?',
+        [id as string]
+      );
+      if (currentNote) {
+        setNote({
+          title: currentNote.title || '',
+          content: currentNote.content || '',
+        });
+      }
+    };
+    fetchNote();
   }, [id, notes]);
 
   const handleTitleChange = (title: string) => {
-    setNote(prev => ({ ...prev, title }));
+    setNote((prev) => ({ ...prev, title }));
     updateNote(id as string, { title });
   };
 
   const handleContentChange = (content: string) => {
-    setNote(prev => ({ ...prev, content }));
+    setNote((prev) => ({ ...prev, content }));
     updateNote(id as string, { content });
   };
 
