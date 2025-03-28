@@ -21,7 +21,7 @@ export interface Note {
   modifiedDate: Date | null;
 }
 
-export const DB_NAME = 'notes-app-db.db'; // Turso db name
+export const DB_NAME = 'offline.db'; // Turso db name
 
 export const tursoOptions = {
   url: process.env.EXPO_PUBLIC_TURSO_DB_URL,
@@ -30,7 +30,7 @@ export const tursoOptions = {
 
 interface NotesContextType {
   notes: Note[];
-  createNote: () => Note;
+  createNote: () => Promise<Note>;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   syncNotes: () => void;
@@ -59,7 +59,9 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchNotes = useCallback(async () => {
-    const notes = await db.getAllAsync<Note>('SELECT * FROM notes');
+    const notes = await db.getAllAsync<Note>(
+      'SELECT * FROM notes ORDER BY modifiedDate DESC'
+    );
     setNotes(notes);
   }, [db]);
 
@@ -84,29 +86,50 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
     [syncNotes]
   );
 
-  const createNote = () => {
+  const createNote = async () => {
     const newNote = {
-      id: String(Date.now()),
       title: '',
       content: '',
       modifiedDate: new Date(),
     };
-    setNotes((prev) => [newNote, ...prev]);
-    return newNote;
-  };
-
-  const updateNote = (id: string, updates: Partial<Note>) => {
-    setNotes((prev) =>
-      prev.map((note) =>
-        note.id === id
-          ? { ...note, ...updates, modifiedDate: new Date() }
-          : note
-      )
+    const result = await db.runAsync(
+      'INSERT INTO notes (title, content, modifiedDate) VALUES (?, ?, ?)',
+      newNote.title,
+      newNote.content,
+      newNote.modifiedDate.toISOString()
     );
+    fetchNotes();
+    return { ...newNote, id: result.lastInsertRowId.toString() };
   };
 
+  const updateNote = async (id: string, updates: Partial<Note>) => {
+    // First get the existing note
+    const existingNote = await db.getFirstAsync<Note>(
+      'SELECT * FROM notes WHERE id = ?',
+      [id]
+    );
+
+    if (!existingNote) return;
+
+    // Merge existing values with updates
+    const updatedNote = {
+      title: updates.title ?? existingNote.title,
+      content: updates.content ?? existingNote.content,
+      modifiedDate: updates.modifiedDate ?? new Date(),
+    };
+
+    await db.runAsync(
+      'UPDATE notes SET title = ?, content = ?, modifiedDate = ? WHERE id = ?',
+      updatedNote.title,
+      updatedNote.content,
+      updatedNote.modifiedDate.toISOString(),
+      id
+    );
+    fetchNotes();
+  };
   const deleteNote = (id: string) => {
-    setNotes((prev) => prev.filter((note) => note.id !== id));
+    db.runAsync('DELETE FROM notes WHERE id = ?', id);
+    fetchNotes();
   };
 
   return (

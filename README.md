@@ -33,3 +33,14 @@ EXPO_PUBLIC_TURSO_DB_URL=libsql://xxxx.aws-us-east-1.turso.io
 EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN=your_token_here
 
 ## Adding data in Turso
+
+Create a table
+
+```sql
+CREATE TABLE "main"."notes"(
+  "id" INTEGER PRIMARY KEY,
+  "title" TEXT,
+  "content" TEXT,
+  "modifiedDatte" TEXT
+)
+```

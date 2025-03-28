@@ -26,8 +26,8 @@ export default function NotesScreen() {
       note.content?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateNote = () => {
-    const newNote = createNote();
+  const handleCreateNote = async () => {
+    const newNote = await createNote();
     router.push(`/note/${newNote.id}`);
   };
 
