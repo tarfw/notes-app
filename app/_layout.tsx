@@ -3,6 +3,7 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DB_NAME, NotesProvider, tursoOptions } from '../context/NotesContext';
 import { SQLiteDatabase, SQLiteProvider } from 'expo-sqlite';
+import { StatusBar } from 'react-native';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -32,6 +33,7 @@ export default function RootLayout() {
 
         // If the current version is already equal or newer, no migration is needed.
         if (currentDbVersion >= DATABASE_VERSION) {
+          console.log('No migration needed, DB version:', currentDbVersion);
           return;
         }
 
@@ -48,8 +50,14 @@ export default function RootLayout() {
           await db.execAsync(
             `CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY NOT NULL, title TEXT, content TEXT, modifiedDate TEXT);`
           );
+          console.log(
+            'Initial migration applied, DB version:',
+            DATABASE_VERSION
+          );
           // Update the current version after applying the initial migration.
           currentDbVersion = 1;
+        } else {
+          console.log('DB version:', currentDbVersion);
         }
 
         // Future migrations for later versions can be added here.
@@ -81,6 +89,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="note/[id]" />
           </Stack>
+          <StatusBar barStyle={'dark-content'} />
         </GestureHandlerRootView>
       </NotesProvider>
     </SQLiteProvider>

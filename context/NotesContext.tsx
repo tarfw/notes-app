@@ -21,7 +21,7 @@ export interface Note {
   modifiedDate: Date | null;
 }
 
-export const DB_NAME = 'offline.db'; // Turso db name
+export const DB_NAME = 'notes-app-db.db'; // Turso db name
 
 export const tursoOptions = {
   url: process.env.EXPO_PUBLIC_TURSO_DB_URL,
@@ -30,7 +30,7 @@ export const tursoOptions = {
 
 interface NotesContextType {
   notes: Note[];
-  createNote: () => Promise<Note>;
+  createNote: () => Promise<Note | undefined>;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
   syncNotes: () => void;
@@ -77,7 +77,7 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
       if (enabled) {
         console.log('Starting sync interval...');
         syncNotes(); // Sync immediately when enabled
-        syncIntervalRef.current = setInterval(syncNotes, 2000);
+        syncIntervalRef.current = setInterval(syncNotes, 1000);
       } else if (syncIntervalRef.current) {
         console.log('Stopping sync interval...');
         clearInterval(syncIntervalRef.current);
@@ -92,14 +92,19 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
       content: '',
       modifiedDate: new Date(),
     };
-    const result = await db.runAsync(
-      'INSERT INTO notes (title, content, modifiedDate) VALUES (?, ?, ?)',
-      newNote.title,
-      newNote.content,
-      newNote.modifiedDate.toISOString()
-    );
-    fetchNotes();
-    return { ...newNote, id: result.lastInsertRowId.toString() };
+
+    try {
+      const result = await db.runAsync(
+        'INSERT INTO notes (title, content, modifiedDate) VALUES (?, ?, ?)',
+        newNote.title,
+        newNote.content,
+        newNote.modifiedDate.toISOString()
+      );
+      fetchNotes();
+      return { ...newNote, id: result.lastInsertRowId.toString() };
+    } catch (e) {
+      console.log(e);
+    }
   };
 
   const updateNote = async (id: string, updates: Partial<Note>) => {

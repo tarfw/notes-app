@@ -27,8 +27,13 @@ export default function NotesScreen() {
   );
 
   const handleCreateNote = async () => {
+    console.log('Creating note...');
     const newNote = await createNote();
-    router.push(`/note/${newNote.id}`);
+    if (newNote) {
+      router.push(`/note/${newNote.id}`);
+    } else {
+      alert('Failed to create note');
+    }
   };
 
   const renderNote = ({ item }: any) => (
