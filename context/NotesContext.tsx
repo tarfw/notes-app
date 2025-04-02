@@ -67,17 +67,23 @@ export function NotesProvider({ children }: { children: React.ReactNode }) {
 
   const syncNotes = useCallback(async () => {
     console.log('Syncing notes with Turso DB...');
-    db.syncLibSQL();
-    fetchNotes();
+
+    try {
+      await db.syncLibSQL();
+      await fetchNotes();
+      console.log('Synced notes with Turso DB');
+    } catch (e) {
+      console.log(e);
+    }
   }, [db, fetchNotes]);
 
   const toggleSync = useCallback(
-    (enabled: boolean) => {
+    async (enabled: boolean) => {
       setIsSyncing(enabled);
       if (enabled) {
         console.log('Starting sync interval...');
-        syncNotes(); // Sync immediately when enabled
-        syncIntervalRef.current = setInterval(syncNotes, 1000);
+        await syncNotes(); // Sync immediately when enabled
+        syncIntervalRef.current = setInterval(syncNotes, 2000);
       } else if (syncIntervalRef.current) {
         console.log('Stopping sync interval...');
         clearInterval(syncIntervalRef.current);

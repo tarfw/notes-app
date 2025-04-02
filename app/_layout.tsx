@@ -18,8 +18,12 @@ export default function RootLayout() {
         },
       }}
       onInit={async (db: SQLiteDatabase) => {
-        // Always sync libSQL first to prevent conflicts between local and remote databases
-        db.syncLibSQL();
+        try {
+          // Always sync libSQL first to prevent conflicts between local and remote databases
+          db.syncLibSQL();
+        } catch (e) {
+          console.log('Error onInit syncing libSQL:', e);
+        }
 
         // Define the target database version.
         const DATABASE_VERSION = 1;
@@ -87,7 +91,12 @@ export default function RootLayout() {
                 headerTitle: 'Notes',
               }}
             />
-            <Stack.Screen name="note/[id]" />
+            <Stack.Screen
+              name="note/[id]"
+              options={{
+                headerShown: true,
+              }}
+            />
           </Stack>
           <StatusBar barStyle={'dark-content'} />
         </GestureHandlerRootView>

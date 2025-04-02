@@ -1,7 +1,6 @@
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Share2 } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, TextInput, Button } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Note, useNotes } from '../../context/NotesContext';
 import { useSQLiteContext } from 'expo-sqlite';
 
@@ -39,36 +38,42 @@ export default function NoteScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#007AFF" />
-          <Text style={styles.backText}>Notes</Text>
-        </Pressable>
-        <Pressable style={styles.shareButton}>
-          <Share2 size={24} color="#007AFF" />
-        </Pressable>
+    <>
+      <Stack.Screen
+        options={{
+          headerTitle: note.title || 'Untitled',
+          headerRight: () => (
+            <Button
+              title="Push"
+              onPress={() => {
+                db.syncLibSQL();
+              }}
+            />
+          ),
+        }}
+      />
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <TextInput
+            style={styles.titleInput}
+            value={note.title}
+            onChangeText={handleTitleChange}
+            placeholder="Title"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={styles.contentInput}
+            value={note.content}
+            onChangeText={handleContentChange}
+            placeholder="Note"
+            placeholderTextColor="#8E8E93"
+            multiline
+            textAlignVertical="top"
+            autoFocus
+          />
+        </View>
       </View>
-      <View style={styles.content}>
-        <TextInput
-          style={styles.titleInput}
-          value={note.title}
-          onChangeText={handleTitleChange}
-          placeholder="Title"
-          placeholderTextColor="#8E8E93"
-        />
-        <TextInput
-          style={styles.contentInput}
-          value={note.content}
-          onChangeText={handleContentChange}
-          placeholder="Note"
-          placeholderTextColor="#8E8E93"
-          multiline
-          textAlignVertical="top"
-          autoFocus
-        />
-      </View>
-    </View>
+    </>
   );
 }
 

@@ -7,6 +7,7 @@ import {
   Pressable,
   Switch,
   Text,
+  Button,
 } from 'react-native';
 import { useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
@@ -18,7 +19,8 @@ import { useNotes } from '../context/NotesContext';
 export default function NotesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
-  const { notes, createNote, deleteNote, isSyncing, toggleSync } = useNotes();
+  const { notes, createNote, deleteNote, isSyncing, toggleSync, syncNotes } =
+    useNotes();
 
   const filteredNotes = notes.filter(
     (note) =>
@@ -55,13 +57,15 @@ export default function NotesScreen() {
                 gap: 10,
               }}
             >
-              <Text style={{ fontSize: 16 }}>Sync</Text>
-              <Switch
+              {/* <Text style={{ fontSize: 16 }}>Sync</Text> */}
+              {/* <Switch
                 value={isSyncing}
                 onValueChange={() => {
-                  toggleSync(!isSyncing);
+                  // toggleSync(!isSyncing);
+                  
                 }}
-              />
+              /> */}
+              <Button title="Pull" onPress={() => syncNotes()} />
             </View>
           ),
         }}
