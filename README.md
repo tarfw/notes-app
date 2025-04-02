@@ -2,28 +2,28 @@
 
 Powered by Expo ❤️
 
-## Getting started
+## Getting Started
 
-- Clone the repo
-- Install dependencies
-- Prebuild the app (⚠️ not compatible with Expo Go)
-- Turn on `LibSQL`
-  ```json
-  [
-    "expo-sqlite",
-    {
-      "useLibSQL": true
-    }
-  ]
-  ```
+1. Clone the repo.
+2. Install dependencies.
+3. Prebuild the app. ⚠️ This app isn't compatible with Expo Go.
+4. Enable `LibSQL` in your `app.json`:
+   ```json
+   [
+     "expo-sqlite",
+     {
+       "useLibSQL": true
+     }
+   ]
+   ```
 
 ## Turso setup
 
-- Create a Turso account (if needed)
-- Go to Databases tab
-  - Create a new Group e.g. "offline"
-  - Create a db in the new group
-  - Create and copy a db token with write/read permissions
+1. Create a Turso account (if needed)
+2. Go to Databases tab
+   - Create a new Group e.g. "offline"
+   - Create a db in the new group
+   - Create and copy a db token with write/read permissions
 
 ## Environment Variables
 
