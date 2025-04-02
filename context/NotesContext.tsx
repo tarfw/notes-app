@@ -1,72 +1,160 @@
-import { createContext, useContext, useState } from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+} from 'react';
 
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  modifiedDate: Date;
+if (
+  !process.env.EXPO_PUBLIC_TURSO_DB_URL ||
+  !process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN
+) {
+  throw new Error('Turso DB URL and Auth Token must be set in .env.local');
 }
+export interface Note {
+  id: string;
+  title: string | null;
+  content: string | null;
+  modifiedDate: Date | null;
+}
+
+export const DB_NAME = 'notes-app-db.db'; // Turso db name
+
+export const tursoOptions = {
+  url: process.env.EXPO_PUBLIC_TURSO_DB_URL,
+  authToken: process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN,
+};
 
 interface NotesContextType {
   notes: Note[];
-  createNote: () => Note;
+  createNote: () => Promise<Note | undefined>;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
+  syncNotes: () => void;
+  toggleSync: (enabled: boolean) => void;
+  isSyncing: boolean;
 }
-
-const initialNotes = [
-  {
-    id: '1',
-    title: 'Shopping List',
-    content: 'Milk, eggs, bread, fruits, vegetables',
-    modifiedDate: new Date('2024-01-20'),
-  },
-  {
-    id: '2',
-    title: 'Meeting Notes',
-    content: 'Discuss project timeline and deliverables',
-    modifiedDate: new Date('2024-01-19'),
-  },
-  {
-    id: '3',
-    title: 'Ideas',
-    content: 'New app features and improvements',
-    modifiedDate: new Date('2024-01-18'),
-  },
-];
 
 const NotesContext = createContext<NotesContextType | null>(null);
 
 export function NotesProvider({ children }: { children: React.ReactNode }) {
-  const [notes, setNotes] = useState(initialNotes);
+  const db = useSQLiteContext();
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncIntervalRef = useRef<NodeJS.Timeout>();
 
-  const createNote = () => {
+  useEffect(() => {
+    fetchNotes();
+  }, [db]);
+
+  useEffect(() => {
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const fetchNotes = useCallback(async () => {
+    const notes = await db.getAllAsync<Note>(
+      'SELECT * FROM notes ORDER BY modifiedDate DESC'
+    );
+    setNotes(notes);
+  }, [db]);
+
+  const syncNotes = useCallback(async () => {
+    console.log('Syncing notes with Turso DB...');
+
+    try {
+      await db.syncLibSQL();
+      await fetchNotes();
+      console.log('Synced notes with Turso DB');
+    } catch (e) {
+      console.log(e);
+    }
+  }, [db, fetchNotes]);
+
+  const toggleSync = useCallback(
+    async (enabled: boolean) => {
+      setIsSyncing(enabled);
+      if (enabled) {
+        console.log('Starting sync interval...');
+        await syncNotes(); // Sync immediately when enabled
+        syncIntervalRef.current = setInterval(syncNotes, 2000);
+      } else if (syncIntervalRef.current) {
+        console.log('Stopping sync interval...');
+        clearInterval(syncIntervalRef.current);
+      }
+    },
+    [syncNotes]
+  );
+
+  const createNote = async () => {
     const newNote = {
-      id: String(Date.now()),
       title: '',
       content: '',
       modifiedDate: new Date(),
     };
-    setNotes(prev => [newNote, ...prev]);
-    return newNote;
+
+    try {
+      const result = await db.runAsync(
+        'INSERT INTO notes (title, content, modifiedDate) VALUES (?, ?, ?)',
+        newNote.title,
+        newNote.content,
+        newNote.modifiedDate.toISOString()
+      );
+      fetchNotes();
+      return { ...newNote, id: result.lastInsertRowId.toString() };
+    } catch (e) {
+      console.log(e);
+    }
   };
 
-  const updateNote = (id: string, updates: Partial<Note>) => {
-    setNotes(prev =>
-      prev.map(note =>
-        note.id === id
-          ? { ...note, ...updates, modifiedDate: new Date() }
-          : note
-      )
+  const updateNote = async (id: string, updates: Partial<Note>) => {
+    // First get the existing note
+    const existingNote = await db.getFirstAsync<Note>(
+      'SELECT * FROM notes WHERE id = ?',
+      [id]
     );
-  };
 
+    if (!existingNote) return;
+
+    // Merge existing values with updates
+    const updatedNote = {
+      title: updates.title ?? existingNote.title,
+      content: updates.content ?? existingNote.content,
+      modifiedDate: updates.modifiedDate ?? new Date(),
+    };
+
+    await db.runAsync(
+      'UPDATE notes SET title = ?, content = ?, modifiedDate = ? WHERE id = ?',
+      updatedNote.title,
+      updatedNote.content,
+      updatedNote.modifiedDate.toISOString(),
+      id
+    );
+    fetchNotes();
+  };
   const deleteNote = (id: string) => {
-    setNotes(prev => prev.filter(note => note.id !== id));
+    db.runAsync('DELETE FROM notes WHERE id = ?', id);
+    fetchNotes();
   };
 
   return (
-    <NotesContext.Provider value={{ notes, createNote, updateNote, deleteNote }}>
+    <NotesContext.Provider
+      value={{
+        notes,
+        createNote,
+        updateNote,
+        deleteNote,
+        syncNotes,
+        toggleSync,
+        isSyncing,
+      }}
+    >
       {children}
     </NotesContext.Provider>
   );

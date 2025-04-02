@@ -1,63 +1,79 @@
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Share2 } from 'lucide-react-native';
-import { useNotes } from '../../context/NotesContext';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, TextInput, Button } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Note, useNotes } from '../../context/NotesContext';
+import { useSQLiteContext } from 'expo-sqlite';
 
 export default function NoteScreen() {
   const { id } = useLocalSearchParams();
+  const db = useSQLiteContext();
   const router = useRouter();
   const { notes, updateNote } = useNotes();
   const [note, setNote] = useState({ title: '', content: '' });
 
   useEffect(() => {
-    const currentNote = notes.find(n => n.id === id);
-    if (currentNote) {
-      setNote({ title: currentNote.title, content: currentNote.content });
-    }
+    const fetchNote = async () => {
+      const currentNote = await db.getFirstAsync<Note>(
+        'SELECT * FROM notes WHERE id = ?',
+        [id as string]
+      );
+      if (currentNote) {
+        setNote({
+          title: currentNote.title || '',
+          content: currentNote.content || '',
+        });
+      }
+    };
+    fetchNote();
   }, [id, notes]);
 
   const handleTitleChange = (title: string) => {
-    setNote(prev => ({ ...prev, title }));
+    setNote((prev) => ({ ...prev, title }));
     updateNote(id as string, { title });
   };
 
   const handleContentChange = (content: string) => {
-    setNote(prev => ({ ...prev, content }));
+    setNote((prev) => ({ ...prev, content }));
     updateNote(id as string, { content });
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#007AFF" />
-          <Text style={styles.backText}>Notes</Text>
-        </Pressable>
-        <Pressable style={styles.shareButton}>
-          <Share2 size={24} color="#007AFF" />
-        </Pressable>
+    <>
+      <Stack.Screen
+        options={{
+          headerTitle: note.title || 'Untitled',
+          headerRight: () => (
+            <Button
+              title="Push"
+              onPress={() => {
+                db.syncLibSQL();
+              }}
+            />
+          ),
+        }}
+      />
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <TextInput
+            style={styles.titleInput}
+            value={note.title}
+            onChangeText={handleTitleChange}
+            placeholder="Title"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={styles.contentInput}
+            value={note.content}
+            onChangeText={handleContentChange}
+            placeholder="Note"
+            placeholderTextColor="#8E8E93"
+            multiline
+            textAlignVertical="top"
+            autoFocus
+          />
+        </View>
       </View>
-      <View style={styles.content}>
-        <TextInput
-          style={styles.titleInput}
-          value={note.title}
-          onChangeText={handleTitleChange}
-          placeholder="Title"
-          placeholderTextColor="#8E8E93"
-        />
-        <TextInput
-          style={styles.contentInput}
-          value={note.content}
-          onChangeText={handleContentChange}
-          placeholder="Note"
-          placeholderTextColor="#8E8E93"
-          multiline
-          textAlignVertical="top"
-          autoFocus
-        />
-      </View>
-    </View>
+    </>
   );
 }
 
