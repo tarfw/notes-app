@@ -9,23 +9,70 @@ import {
   Text,
   Button,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { Plus, Search, X, ArrowUpCircle, ArrowDownCircle } from 'lucide-react-native';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { useItems } from '../context/ItemsContext';
+import { useSQLiteContext } from 'expo-sqlite';
 
 export default function ItemsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [tableSize, setTableSize] = useState('0 KB');
   const router = useRouter();
-  const { items, createItem, deleteItem, isSyncing, toggleSync, pullFromRemote, pushToRemote } =
+  const db = useSQLiteContext();
+  const { items, createItem, deleteItem, isSyncing, toggleSync, pullFromRemote, pushToRemote, hasPendingDeletions, syncPendingDeletions } =
     useItems();
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = items
+    .filter(item => item?.id) // Only include items with valid IDs
+    .filter(
+      (item) =>
+        item.itemid?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.notes?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.locationid?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+  // Calculate table size
+  useEffect(() => {
+    const calculateTableSize = async () => {
+      try {
+        // Get table size from SQLite system tables
+        const result = await db.getFirstAsync<{ size: number }>(
+          `SELECT SUM(LENGTH(id) + LENGTH(COALESCE(itemid, '')) + LENGTH(COALESCE(locationid, '')) + 
+           LENGTH(COALESCE(type, '')) + LENGTH(COALESCE(refid, '')) + LENGTH(COALESCE(userid, '')) + 
+           LENGTH(COALESCE(notes, '')) + LENGTH(COALESCE(status, '')) + 
+           LENGTH(COALESCE(created_at, '')) + 40) as size FROM ilogs`
+        );
+        
+        if (result && result.size) {
+          const sizeInBytes = result.size;
+          const sizeInKB = sizeInBytes / 1024;
+          const sizeInMB = sizeInKB / 1024;
+          
+          if (sizeInMB >= 1) {
+            setTableSize(`${sizeInMB.toFixed(2)} MB`);
+          } else if (sizeInKB >= 1) {
+            setTableSize(`${sizeInKB.toFixed(2)} KB`);
+          } else {
+            setTableSize(`${sizeInBytes} bytes`);
+          }
+        } else {
+          // Fallback: estimate based on record count
+          const estimatedSizeKB = items.length * 0.5; // Rough estimate
+          setTableSize(`~${estimatedSizeKB.toFixed(2)} KB`);
+        }
+      } catch (error) {
+        console.error('Error calculating table size:', error);
+        // Fallback: estimate based on record count
+        const estimatedSizeKB = items.length * 0.5; // Rough estimate
+        setTableSize(`~${estimatedSizeKB.toFixed(2)} KB`);
+      }
+    };
+
+    calculateTableSize();
+  }, [items, db]);
 
   const handlePullFromRemote = async () => {
     console.log('Pulling changes from remote...');
@@ -35,6 +82,11 @@ export default function ItemsScreen() {
   const handlePushToRemote = async () => {
     console.log('Pushing local changes to remote...');
     await pushToRemote();
+  };
+
+  const handleSyncPendingDeletions = async () => {
+    console.log('Syncing pending deletions...');
+    await syncPendingDeletions();
   };
 
   const handleCreateItem = async () => {
@@ -50,8 +102,12 @@ export default function ItemsScreen() {
   const renderItem = ({ item }: any) => (
     <SwipeableItem
       item={item}
-      onPress={() => router.push(`/item/${item.id}` as any)}
-      onDelete={() => deleteItem(item.id)}
+      onPress={() => router.push(`/item/${item.id.toString()}` as any)}
+      onDelete={() => {
+        if (item?.id !== undefined && item?.id !== null) {
+          deleteItem(item.id);
+        }
+      }}
     />
   );
   return (
@@ -73,6 +129,16 @@ export default function ItemsScreen() {
                   toggleSync(enabled);
                 }}
               />
+              {hasPendingDeletions && (
+                <Pressable
+                  style={[styles.syncButton, { backgroundColor: '#FF3B30' }]}
+                  onPress={handleSyncPendingDeletions}
+                >
+                  <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                    {hasPendingDeletions ? 'Sync Del' : ''}
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
                 style={styles.syncButton}
                 onPress={handlePullFromRemote}
@@ -93,7 +159,7 @@ export default function ItemsScreen() {
         <FlatList
           data={filteredItems}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           ListHeaderComponent={() => (
             <View style={styles.headerContainer}>
               <View style={styles.searchContainer}>
@@ -110,6 +176,9 @@ export default function ItemsScreen() {
                   </Pressable>
                 )}
               </View>
+              <Text style={styles.dataSize}>
+                {filteredItems.length} of {items.length} records • {tableSize}
+              </Text>
             </View>
           )}
           contentContainerStyle={styles.listContent}
@@ -172,5 +241,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dataSize: {
+    fontSize: 12,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 8,
   },
 });

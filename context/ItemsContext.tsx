@@ -14,45 +14,351 @@ if (
 ) {
   throw new Error('Turso DB URL and Auth Token must be set in .env.local');
 }
-export interface Item {
-  id: string;
-  image: string | null;
-  barcode: string | null;
-  name: string | null;
+
+export interface ILog {
+  id: number;
+  itemid: string | null;
+  locationid: string | null;
+  type: string | null;
   qty: number | null;
+  refid: string | null;
+  pqty: number | null;  // previous quantity
+  nqty: number | null;  // new quantity
+  cqty: number | null;  // committed quantity
+  userid: string | null;
+  notes: string | null;
+  status: string | null;
+  created_at: string | null;
 }
 
-export const DB_NAME = 'items-app-db.db'; // Turso db name
+export const DB_NAME = 'items-app-db.db';
 
 export const tursoOptions = {
   url: process.env.EXPO_PUBLIC_TURSO_DB_URL,
   authToken: process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN,
 };
 
-interface ItemsContextType {
-  items: Item[];
-  createItem: () => Promise<Item | undefined>;
-  updateItem: (id: string, updates: Partial<Item>) => void;
-  deleteItem: (id: string) => void;
-  syncItems: () => void;
+interface ILogsContextType {
+  items: ILog[];
+  createItem: () => Promise<ILog | undefined>;
+  updateItem: (id: number, updates: Partial<ILog>) => void;
+  saveItem: (id: number, itemData: Partial<ILog>) => Promise<string>;
+  deleteItem: (id: number) => void;
   pullFromRemote: () => void;
   pushToRemote: () => void;
   toggleSync: (enabled: boolean) => void;
+  startEditMode: () => void;
+  endEditMode: () => void;
   isSyncing: boolean;
+  hasPendingDeletions: boolean;
+  syncPendingDeletions: () => Promise<void>;
 }
 
-const ItemsContext = createContext<ItemsContextType | null>(null);
+const ILogsContext = createContext<ILogsContextType | null>(null);
 
-export function ItemsProvider({ children }: { children: React.ReactNode }) {
+export function ILogsProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
-  const [items, setItems] = useState<Item[]>([]);
+  
+  // Separate state for UI items and sync control
+  const [uiItems, setUiItems] = useState<ILog[]>([]);
+  const [pendingItems, setPendingItems] = useState<Map<string, ILog>>(new Map());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasPendingDeletions, setHasPendingDeletions] = useState(false);
+  
+  // Refs for sync control - won't trigger re-renders
   const syncIntervalRef = useRef<NodeJS.Timeout>();
+  const isEditingRef = useRef(false);
+  const syncQueueRef = useRef<Set<string>>(new Set());
+  const deletedItemsRef = useRef<Set<number>>(new Set());
 
+  // Initial data load
   useEffect(() => {
-    fetchItems();
+    loadItemsFromDB();
+  }, []);
+
+  // Load items from database without affecting UI state during editing
+  const loadItemsFromDB = useCallback(async () => {
+    try {
+      const items = await db.getAllAsync<ILog>(
+        'SELECT * FROM ilogs ORDER BY created_at DESC'
+      );
+      
+      // Only update UI if not currently editing
+      if (!isEditingRef.current) {
+        setUiItems(items);
+      }
+    } catch (error) {
+      console.error('Error loading items:', error);
+    }
   }, [db]);
 
+  // Enhanced background sync that handles deletions
+  const backgroundSync = useCallback(async () => {
+    if (!isSyncing || isEditingRef.current) {
+      return;
+    }
+
+    try {
+      console.log(`Background sync starting... Pending deletions: ${deletedItemsRef.current.size}`);
+      
+      // Sync with remote database to push local changes (including deletions)
+      await db.syncLibSQL();
+      
+      console.log('Background sync completed successfully');
+      
+      // Load fresh data but don't update UI if editing
+      const items = await db.getAllAsync<ILog>(
+        'SELECT * FROM ilogs ORDER BY created_at DESC'
+      );
+      
+      if (!isEditingRef.current) {
+        setUiItems(items);
+      }
+      
+      // Clear sync queue and deleted items after successful sync
+      const deletedCount = deletedItemsRef.current.size;
+      syncQueueRef.current.clear();
+      deletedItemsRef.current.clear();
+      setHasPendingDeletions(false);
+      
+      if (deletedCount > 0) {
+        console.log(`Successfully synced ${deletedCount} deletions to remote database`);
+      }
+    } catch (error) {
+      // Silently handle sync errors
+      console.error('Background sync error:', error);
+    }
+  }, [db, isSyncing]);
+
+  // Start editing mode - blocks UI updates
+  const startEditMode = useCallback(() => {
+    isEditingRef.current = true;
+  }, []);
+
+  // End editing mode - allows UI updates and syncs
+  const endEditMode = useCallback(() => {
+    isEditingRef.current = false;
+    
+    // Immediate refresh after editing
+    setTimeout(() => {
+      loadItemsFromDB();
+      if (isSyncing) {
+        backgroundSync();
+      }
+    }, 100);
+  }, [loadItemsFromDB, backgroundSync, isSyncing]);
+
+  // Create new item (local only, no DB insertion)
+  const createItem = useCallback(async () => {
+    const tempId = -(Date.now() + Math.floor(Math.random() * 1000)); // Negative number for temp items
+    
+    const newItem: ILog = {
+      id: tempId,
+      itemid: '',
+      locationid: '',
+      type: '',
+      qty: 0,
+      refid: '',
+      pqty: 0,
+      nqty: 0,
+      cqty: 0,
+      userid: '',
+      notes: '',
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+
+    setPendingItems(prev => new Map(prev).set(tempId.toString(), newItem));
+    
+    return newItem;
+  }, []);
+
+  // Update item (local state only during editing)
+  const updateItem = useCallback((id: number, updates: Partial<ILog>) => {
+    if (id < 0) {
+      // Update pending item (negative ID)
+      setPendingItems(prev => {
+        const newMap = new Map(prev);
+        const existingItem = newMap.get(id.toString());
+        if (existingItem) {
+          newMap.set(id.toString(), { ...existingItem, ...updates });
+        }
+        return newMap;
+      });
+    } else {
+      // Update existing item in UI state only (don't touch DB during editing)
+      setUiItems(prev => prev.map(item => 
+        item.id === id ? { ...item, ...updates } : item
+      ));
+    }
+  }, []);
+
+  // Save item to database (only called when user explicitly saves)
+  const saveItem = useCallback(async (id: number, itemData: Partial<ILog>): Promise<string> => {
+    try {
+      if (id < 0) {
+        // Insert new item (negative ID)
+        const result = await db.runAsync(
+          'INSERT INTO ilogs (itemid, locationid, type, qty, refid, pqty, nqty, cqty, userid, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          itemData.itemid || '',
+          itemData.locationid || '',
+          itemData.type || '',
+          itemData.qty || 0,
+          itemData.refid || '',
+          itemData.pqty || 0,
+          itemData.nqty || 0,
+          itemData.cqty || 0,
+          itemData.userid || '',
+          itemData.notes || '',
+          itemData.status || 'active'
+        );
+        
+        const realId = result.lastInsertRowId;
+        
+        // Remove from pending
+        setPendingItems(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(id.toString());
+          return newMap;
+        });
+        
+        // Add to sync queue for later
+        syncQueueRef.current.add(realId.toString());
+        
+        return realId.toString();
+      } else {
+        // Update existing item
+        const fields: string[] = [];
+        const values: any[] = [];
+        
+        Object.entries(itemData).forEach(([key, value]) => {
+          if (value !== undefined && key !== 'id' && key !== 'created_at') {
+            fields.push(`${key} = ?`);
+            values.push(value);
+          }
+        });
+        
+        if (fields.length > 0) {
+          values.push(id);
+          const updateQuery = `UPDATE ilogs SET ${fields.join(', ')} WHERE id = ?`;
+          await db.runAsync(updateQuery, ...values);
+          
+          // Add to sync queue
+          syncQueueRef.current.add(id.toString());
+        }
+        
+        return id.toString();
+      }
+    } catch (error) {
+      console.error('Error saving item:', error);
+      throw error;
+    }
+  }, [db]);
+
+  // Delete item
+  const deleteItem = useCallback(async (id: number) => {
+    // Validate ID parameter
+    if (id === undefined || id === null) {
+      console.error('Delete failed: Valid ID is required, received:', id);
+      return;
+    }
+
+    try {
+      if (id < 0) {
+        // Remove pending item (negative ID)
+        setPendingItems(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(id.toString());
+          return newMap;
+        });
+      } else {
+        // Delete from database
+        await db.runAsync('DELETE FROM ilogs WHERE id = ?', id);
+        
+        // Update UI immediately
+        setUiItems(prev => prev.filter(item => item.id !== id));
+        
+        // Track deletion for sync
+        deletedItemsRef.current.add(id);
+        setHasPendingDeletions(true);
+        syncQueueRef.current.add(`delete_${id}`);
+        
+        console.log(`Item ${id} deleted locally, pending sync to remote. Total pending deletions: ${deletedItemsRef.current.size}`);
+        
+        // If auto-sync is enabled, trigger immediate sync for deletions
+        if (isSyncing) {
+          // Small delay to ensure deletion is committed locally
+          setTimeout(() => {
+            console.log('Triggering immediate sync for deletion...');
+            backgroundSync();
+          }, 100);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting item:', error);
+    }
+  }, [db, isSyncing, backgroundSync]);
+
+  // Pull from remote
+  const pullFromRemote = useCallback(async () => {
+    try {
+      await db.syncLibSQL();
+      await loadItemsFromDB();
+    } catch (error) {
+      // Silently handle pull errors
+    }
+  }, [db, loadItemsFromDB]);
+
+  // Push to remote
+  const pushToRemote = useCallback(async () => {
+    try {
+      await db.syncLibSQL();
+    } catch (error) {
+      // Silently handle push errors
+    }
+  }, [db]);
+
+  // Sync pending deletions
+  const syncPendingDeletions = useCallback(async () => {
+    if (deletedItemsRef.current.size > 0) {
+      try {
+        await db.syncLibSQL();
+        deletedItemsRef.current.clear();
+        setHasPendingDeletions(false);
+        console.log('Pending deletions synced successfully');
+      } catch (error) {
+        console.error('Error syncing pending deletions:', error);
+      }
+    }
+  }, [db]);
+
+  // Toggle sync
+  const toggleSync = useCallback((enabled: boolean) => {
+      setIsSyncing(enabled);
+    
+      if (enabled) {
+        // Immediate sync to handle any pending changes (including deletions)
+        backgroundSync();
+        // Set interval for background sync - more frequent when there are pending deletions
+        const syncInterval = hasPendingDeletions ? 5000 : 10000; // 5s if deletions pending, 10s otherwise
+        syncIntervalRef.current = setInterval(backgroundSync, syncInterval);
+      } else {
+        if (syncIntervalRef.current) {
+          clearInterval(syncIntervalRef.current);
+        }
+      }
+  }, [backgroundSync, hasPendingDeletions]);
+
+  // Update sync interval when pending deletions change
+  useEffect(() => {
+    if (isSyncing && syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+      const syncInterval = hasPendingDeletions ? 5000 : 10000;
+      syncIntervalRef.current = setInterval(backgroundSync, syncInterval);
+    }
+  }, [hasPendingDeletions, isSyncing, backgroundSync]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (syncIntervalRef.current) {
@@ -61,173 +367,39 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const fetchItems = useCallback(async () => {
-    console.log('📋 Fetching items from local database...');
-    const items = await db.getAllAsync<Item>(
-      'SELECT * FROM items ORDER BY name ASC'
-    );
-    console.log(`📋 Found ${items.length} items in local database:`, items.map(item => ({ id: item.id, name: item.name || 'EMPTY' })));
-    setItems(items);
-  }, [db]);
-
-  const syncItems = useCallback(async () => {
-    console.log('🔄 Syncing items with Turso DB...');
-    const startTime = Date.now();
-
-    try {
-      await db.syncLibSQL();
-      await fetchItems();
-      const duration = Date.now() - startTime;
-      console.log(`✅ Synced items with Turso DB (${duration}ms)`);
-    } catch (e) {
-      console.log('❌ Sync failed:', e);
-    }
-  }, [db, fetchItems]);
-
-  const pullFromRemote = useCallback(async () => {
-    console.log('⬇️ Pulling changes from remote Turso DB...');
-    const startTime = Date.now();
-    try {
-      await db.syncLibSQL();
-      await fetchItems();
-      const duration = Date.now() - startTime;
-      console.log(`✅ Successfully pulled changes from remote (${duration}ms)`);
-    } catch (e) {
-      console.log('❌ Error pulling from remote:', e);
-    }
-  }, [db, fetchItems]);
-
-  const pushToRemote = useCallback(async () => {
-    console.log('⬆️ Pushing local changes to remote Turso DB...');
-    const startTime = Date.now();
-    try {
-      await db.syncLibSQL();
-      const duration = Date.now() - startTime;
-      console.log(`✅ Successfully pushed local changes to remote (${duration}ms)`);
-    } catch (e) {
-      console.log('❌ Error pushing to remote:', e);
-    }
-  }, [db]);
-
-  const toggleSync = useCallback(
-    async (enabled: boolean) => {
-      setIsSyncing(enabled);
-      if (enabled) {
-        console.log('🚀 Starting sync interval (every 10 seconds)...');
-        await syncItems(); // Sync immediately when enabled
-        syncIntervalRef.current = setInterval(syncItems, 10000);
-      } else if (syncIntervalRef.current) {
-        console.log('⏹️ Stopping sync interval...');
-        clearInterval(syncIntervalRef.current);
-      }
-    },
-    [syncItems]
-  );
-
-  const createItem = async () => {
-    const newItem = {
-      image: '',
-      barcode: '',
-      name: '',
-      qty: 0,
-    };
-
-    try {
-      const result = await db.runAsync(
-        'INSERT INTO items (image, barcode, name, qty) VALUES (?, ?, ?, ?)',
-        newItem.image,
-        newItem.barcode,
-        newItem.name,
-        newItem.qty
-      );
-      fetchItems();
-      return { ...newItem, id: result.lastInsertRowId.toString() };
-    } catch (e) {
-      console.log(e);
-    }
-  };
-
-  const updateItem = async (id: string, updates: Partial<Item>) => {
-    try {
-      console.log(`🔄 Updating item ${id} with:`, updates);
-      
-      // Build dynamic SQL query based on what fields are being updated
-      const fields = [];
-      const values = [];
-      
-      if (updates.image !== undefined) {
-        fields.push('image = ?');
-        values.push(updates.image);
-      }
-      
-      if (updates.barcode !== undefined) {
-        fields.push('barcode = ?');
-        values.push(updates.barcode);
-      }
-      
-      if (updates.name !== undefined) {
-        fields.push('name = ?');
-        values.push(updates.name);
-      }
-      
-      if (updates.qty !== undefined) {
-        fields.push('qty = ?');
-        values.push(updates.qty);
-      }
-      
-      values.push(id);
-
-      const updateQuery = `UPDATE items SET ${fields.join(', ')} WHERE id = ?`;
-      console.log(`🔍 Executing query: ${updateQuery}`, values);
-
-      const result = await db.runAsync(updateQuery, ...values);
-      console.log(`✅ Update result:`, result);
-
-      // Always refetch to ensure UI is in sync with database
-      await fetchItems();
-      console.log('✅ Item updated and list refreshed');
-    } catch (error) {
-      console.error('❌ Error updating item:', error);
-      // Fallback to refetch on error
-      fetchItems();
-    }
-  };
-  const deleteItem = async (id: string) => {
-    try {
-      await db.runAsync('DELETE FROM items WHERE id = ?', id);
-      
-      // Update local state optimistically
-      setItems(prevItems => prevItems.filter(item => item.id !== id));
-    } catch (error) {
-      console.error('Error deleting item:', error);
-      // Fallback to refetch on error
-      fetchItems();
-    }
-  };
+  // Combined items for UI (real items + pending items) - filter out invalid items
+  const allItems = [
+    ...uiItems.filter(item => item && item.id), 
+    ...Array.from(pendingItems.values()).filter(item => item && item.id)
+  ];
 
   return (
-    <ItemsContext.Provider
+    <ILogsContext.Provider
       value={{
-        items,
+        items: allItems,
         createItem,
         updateItem,
+        saveItem,
         deleteItem,
-        syncItems,
         pullFromRemote,
         pushToRemote,
         toggleSync,
+        startEditMode,
+        endEditMode,
         isSyncing,
+        hasPendingDeletions,
+        syncPendingDeletions,
       }}
     >
       {children}
-    </ItemsContext.Provider>
+    </ILogsContext.Provider>
   );
 }
 
 export function useItems() {
-  const context = useContext(ItemsContext);
+  const context = useContext(ILogsContext);
   if (!context) {
-    throw new Error('useItems must be used within an ItemsProvider');
+    throw new Error('useItems must be used within an ILogsProvider');
   }
   return context;
 }

@@ -4,16 +4,24 @@ import { Trash2 } from 'lucide-react-native';
 
 LogBox.ignoreAllLogs(); // YOLO
 
-interface Item {
-  id: string;
-  image: string | null;
-  barcode: string | null;
-  name: string | null;
+interface ILog {
+  id: number;
+  itemid: string | null;
+  locationid: string | null;
+  type: string | null;
   qty: number | null;
+  refid: string | null;
+  pqty: number | null;
+  nqty: number | null;
+  cqty: number | null;
+  userid: string | null;
+  notes: string | null;
+  status: string | null;
+  created_at: string | null;
 }
 
 interface Props {
-  item: Item;
+  item: ILog;
   onPress: () => void;
   onDelete: () => void;
 }
@@ -29,14 +37,19 @@ export function SwipeableItem({ item, onPress, onDelete }: Props) {
       >
         <View style={styles.content}>
           <Text style={styles.itemName}>
-            {item.name || 'Untitled Item'}
+            {item.itemid || 'Untitled Item'}
           </Text>
           <Text style={styles.itemBarcode}>
-            {item.barcode || 'No barcode'}
+            Type: {item.type || 'No type'} | Location: {item.locationid || 'No location'}
           </Text>
           <Text style={styles.itemQty}>
-            Qty: {item.qty || 0}
+            Qty: {item.qty || 0} | Status: {item.status || 'No status'}
           </Text>
+          {item.notes && (
+            <Text style={styles.itemNotes}>
+              Notes: {item.notes}
+            </Text>
+          )}
         </View>
         <Pressable
           onPress={() => {
@@ -93,5 +106,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#3C3C43',
     fontWeight: '500',
+  },
+  itemNotes: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });

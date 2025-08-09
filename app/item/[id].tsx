@@ -1,57 +1,151 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, StyleSheet, TextInput, Pressable, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Item, useItems } from '../../context/ItemsContext';
+import { ILog, useItems } from '../../context/ItemsContext';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Save } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams();
   const db = useSQLiteContext();
   const router = useRouter();
-  const { items, updateItem } = useItems();
+  const { items, updateItem, saveItem, deleteItem, startEditMode, endEditMode } = useItems();
   const [item, setItem] = useState({ 
-    image: '', 
-    barcode: '', 
-    name: '', 
-    qty: 0 
+    itemid: '', 
+    locationid: '', 
+    type: '', 
+    qty: 0,
+    refid: '',
+    pqty: 0,
+    nqty: 0,
+    cqty: 0,
+    userid: '',
+    notes: '',
+    status: 'active'
   });
   const originalItemRef = useRef<typeof item | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isNewItem, setIsNewItem] = useState(false);
 
   useEffect(() => {
     const fetchItem = async () => {
-      const currentItem = await db.getFirstAsync<Item>(
-        'SELECT * FROM items WHERE id = ?',
-        [id as string]
+      const numericId = Number(id);
+      
+      // First check if it's a pending item (negative ID)
+      if (numericId < 0) {
+        const pendingItem = items.find(item => item.id === numericId);
+        if (pendingItem) {
+          const itemData = {
+            itemid: pendingItem.itemid || '',
+            locationid: pendingItem.locationid || '',
+            type: pendingItem.type || '',
+            qty: pendingItem.qty || 0,
+            refid: pendingItem.refid || '',
+            pqty: pendingItem.pqty || 0,
+            nqty: pendingItem.nqty || 0,
+            cqty: pendingItem.cqty || 0,
+            userid: pendingItem.userid || '',
+            notes: pendingItem.notes || '',
+            status: pendingItem.status || 'active'
+          };
+          setItem(itemData);
+          originalItemRef.current = itemData;
+          setHasUnsavedChanges(false);
+          setIsNewItem(true); // Pending items are always new
+        }
+        return;
+      }
+      
+      // Otherwise fetch from database
+      const currentItem = await db.getFirstAsync<ILog>(
+        'SELECT * FROM ilogs WHERE id = ?',
+        [numericId]
       );
       if (currentItem) {
         const itemData = {
-          image: currentItem.image || '',
-          barcode: currentItem.barcode || '',
-          name: currentItem.name || '',
+          itemid: currentItem.itemid || '',
+          locationid: currentItem.locationid || '',
+          type: currentItem.type || '',
           qty: currentItem.qty || 0,
+          refid: currentItem.refid || '',
+          pqty: currentItem.pqty || 0,
+          nqty: currentItem.nqty || 0,
+          cqty: currentItem.cqty || 0,
+          userid: currentItem.userid || '',
+          notes: currentItem.notes || '',
+          status: currentItem.status || 'active'
         };
         setItem(itemData);
         originalItemRef.current = itemData;
         setHasUnsavedChanges(false);
+        
+        // Check if this is a newly created empty item
+        const isEmpty = !currentItem.itemid && !currentItem.locationid && 
+                       !currentItem.type && !currentItem.refid && 
+                       !currentItem.userid && !currentItem.notes;
+        setIsNewItem(isEmpty);
       }
     };
     fetchItem();
-  }, [id, db]); // Removed 'items' dependency to prevent refresh on sync
+  }, [id, db, items]); // Added items dependency to react to pending item changes
+  
+  // Start/end edit mode for smooth sync operation
+  useFocusEffect(
+    React.useCallback(() => {
+      startEditMode();
+      
+      return () => {
+        endEditMode();
+      };
+    }, [startEditMode, endEditMode])
+  );
+  
+  // Handle back button press to clean up empty items
+  const handleBackPress = () => {
+    if (isNewItem && !hasUnsavedChanges) {
+      const isEmpty = !item.itemid && !item.locationid && 
+                     !item.type && !item.refid && 
+                     !item.userid && !item.notes;
+      if (isEmpty) {
+        deleteItem(Number(id));
+      }
+    }
+    router.back();
+  };
 
-  const handleImageChange = (image: string) => {
-    setItem((prev) => ({ ...prev, image }));
+  const handleItemIdChange = (itemid: string) => {
+    setItem((prev) => ({ ...prev, itemid }));
     setHasUnsavedChanges(true);
   };
 
-  const handleBarcodeChange = (barcode: string) => {
-    setItem((prev) => ({ ...prev, barcode }));
+  const handleLocationIdChange = (locationid: string) => {
+    setItem((prev) => ({ ...prev, locationid }));
     setHasUnsavedChanges(true);
   };
 
-  const handleNameChange = (name: string) => {
-    setItem((prev) => ({ ...prev, name }));
+  const handleTypeChange = (type: string) => {
+    setItem((prev) => ({ ...prev, type }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleRefIdChange = (refid: string) => {
+    setItem((prev) => ({ ...prev, refid }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleUserIdChange = (userid: string) => {
+    setItem((prev) => ({ ...prev, userid }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNotesChange = (notes: string) => {
+    setItem((prev) => ({ ...prev, notes }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleStatusChange = (status: string) => {
+    setItem((prev) => ({ ...prev, status }));
     setHasUnsavedChanges(true);
   };
 
@@ -61,29 +155,49 @@ export default function ItemScreen() {
     setHasUnsavedChanges(true);
   };
 
+  const handlePqtyChange = (pqtyText: string) => {
+    const pqty = parseInt(pqtyText) || 0;
+    setItem((prev) => ({ ...prev, pqty }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleNqtyChange = (nqtyText: string) => {
+    const nqty = parseInt(nqtyText) || 0;
+    setItem((prev) => ({ ...prev, nqty }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleCqtyChange = (cqtyText: string) => {
+    const cqty = parseInt(cqtyText) || 0;
+    setItem((prev) => ({ ...prev, cqty }));
+    setHasUnsavedChanges(true);
+  };
+
   const handleSaveItem = async () => {
     try {
-      console.log('💾 Saving item to local database...');
-      
-      // Save current item data to LOCAL database only
-      await updateItem(id as string, { 
-        image: item.image, 
-        barcode: item.barcode,
-        name: item.name,
-        qty: item.qty
+      // Use saveItem for both new and existing items
+      const savedId = await saveItem(Number(id), { 
+        itemid: item.itemid, 
+        locationid: item.locationid,
+        type: item.type,
+        qty: item.qty,
+        refid: item.refid,
+        pqty: item.pqty,
+        nqty: item.nqty,
+        cqty: item.cqty,
+        userid: item.userid,
+        notes: item.notes,
+        status: item.status
       });
       
-      console.log('✅ Item saved to local database successfully');
       setHasUnsavedChanges(false);
+      setIsNewItem(false); // No longer a new item after saving
       
       // Small delay to ensure smooth state transition, then navigate back
       setTimeout(() => {
-        console.log('🔙 Navigating back to items list...');
         router.back();
-        console.log('🔄 Changes ready for sync when auto-sync runs');
       }, 100);
     } catch (error) {
-      console.error('❌ Error saving item:', error);
       alert('Failed to save item. Please try again.');
     }
   };
@@ -92,7 +206,12 @@ export default function ItemScreen() {
     <>
       <Stack.Screen
         options={{
-          headerTitle: item.name || 'Untitled Item',
+          headerTitle: item.itemid || 'Untitled Item',
+          headerLeft: () => (
+            <Pressable onPress={handleBackPress}>
+              <Text style={{ color: '#007AFF', fontSize: 17 }}>Back</Text>
+            </Pressable>
+          ),
           headerRight: () => (
             <Pressable
               style={[styles.saveButton, hasUnsavedChanges && styles.saveButtonHighlight]}
@@ -106,34 +225,88 @@ export default function ItemScreen() {
       <View style={styles.container}>
         <View style={styles.content}>
           <TextInput
-            style={styles.input}
-            value={item.image}
-            onChangeText={handleImageChange}
-            placeholder="Image URL"
-            placeholderTextColor="#8E8E93"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.barcode}
-            onChangeText={handleBarcodeChange}
-            placeholder="Barcode"
-            placeholderTextColor="#8E8E93"
-          />
-          <TextInput
             style={styles.nameInput}
-            value={item.name}
-            onChangeText={handleNameChange}
-            placeholder="Item Name"
+            value={item.itemid}
+            onChangeText={handleItemIdChange}
+            placeholder="Item ID"
             placeholderTextColor="#8E8E93"
             autoFocus
           />
           <TextInput
             style={styles.input}
+            value={item.locationid}
+            onChangeText={handleLocationIdChange}
+            placeholder="Location ID"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.type}
+            onChangeText={handleTypeChange}
+            placeholder="Type"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={styles.input}
             value={item.qty.toString()}
             onChangeText={handleQtyChange}
-            placeholder="Quantity"
+            placeholder="Current Quantity"
             placeholderTextColor="#8E8E93"
             keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.refid}
+            onChangeText={handleRefIdChange}
+            placeholder="Reference ID"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.pqty.toString()}
+            onChangeText={handlePqtyChange}
+            placeholder="Previous Quantity"
+            placeholderTextColor="#8E8E93"
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.nqty.toString()}
+            onChangeText={handleNqtyChange}
+            placeholder="New Quantity"
+            placeholderTextColor="#8E8E93"
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.cqty.toString()}
+            onChangeText={handleCqtyChange}
+            placeholder="Committed Quantity"
+            placeholderTextColor="#8E8E93"
+            keyboardType="numeric"
+          />
+          <TextInput
+            style={styles.input}
+            value={item.userid}
+            onChangeText={handleUserIdChange}
+            placeholder="User ID"
+            placeholderTextColor="#8E8E93"
+          />
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={item.notes}
+            onChangeText={handleNotesChange}
+            placeholder="Notes"
+            placeholderTextColor="#8E8E93"
+            multiline
+            numberOfLines={3}
+          />
+          <TextInput
+            style={styles.input}
+            value={item.status}
+            onChangeText={handleStatusChange}
+            placeholder="Status"
+            placeholderTextColor="#8E8E93"
           />
         </View>
       </View>
@@ -175,5 +348,10 @@ const styles = StyleSheet.create({
   saveButtonHighlight: {
     backgroundColor: '#FFE5E5',
     borderRadius: 8,
+  },
+  notesInput: {
+    height: 80,
+    textAlignVertical: 'top',
+    paddingTop: 8,
   },
 });
