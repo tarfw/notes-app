@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, TextInput, Pressable } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Item, useItems } from '../../context/ItemsContext';
@@ -16,6 +16,8 @@ export default function ItemScreen() {
     name: '', 
     qty: 0 
   });
+  const originalItemRef = useRef<typeof item | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     const fetchItem = async () => {
@@ -24,41 +26,45 @@ export default function ItemScreen() {
         [id as string]
       );
       if (currentItem) {
-        setItem({
+        const itemData = {
           image: currentItem.image || '',
           barcode: currentItem.barcode || '',
           name: currentItem.name || '',
           qty: currentItem.qty || 0,
-        });
+        };
+        setItem(itemData);
+        originalItemRef.current = itemData;
+        setHasUnsavedChanges(false);
       }
     };
     fetchItem();
-  }, [id, items]);
+  }, [id, db]); // Removed 'items' dependency to prevent refresh on sync
 
   const handleImageChange = (image: string) => {
     setItem((prev) => ({ ...prev, image }));
-    // No automatic saving - only save on Push button press
+    setHasUnsavedChanges(true);
   };
 
   const handleBarcodeChange = (barcode: string) => {
     setItem((prev) => ({ ...prev, barcode }));
-    // No automatic saving - only save on Push button press
+    setHasUnsavedChanges(true);
   };
 
   const handleNameChange = (name: string) => {
     setItem((prev) => ({ ...prev, name }));
-    // No automatic saving - only save on Push button press
+    setHasUnsavedChanges(true);
   };
 
   const handleQtyChange = (qtyText: string) => {
     const qty = parseInt(qtyText) || 0;
     setItem((prev) => ({ ...prev, qty }));
-    // No automatic saving - only save on Push button press
+    setHasUnsavedChanges(true);
   };
 
   const handleSaveItem = async () => {
     try {
-      console.log('Saving item to local database...');
+      console.log('💾 Saving item to local database...');
+      
       // Save current item data to LOCAL database only
       await updateItem(id as string, { 
         image: item.image, 
@@ -68,10 +74,17 @@ export default function ItemScreen() {
       });
       
       console.log('✅ Item saved to local database successfully');
-      // Note: Remote sync happens via Push button in Items list screen
+      setHasUnsavedChanges(false);
+      
+      // Small delay to ensure smooth state transition, then navigate back
+      setTimeout(() => {
+        console.log('🔙 Navigating back to items list...');
+        router.back();
+        console.log('🔄 Changes ready for sync when auto-sync runs');
+      }, 100);
     } catch (error) {
       console.error('❌ Error saving item:', error);
-      alert('Failed to save item');
+      alert('Failed to save item. Please try again.');
     }
   };
 
@@ -82,10 +95,10 @@ export default function ItemScreen() {
           headerTitle: item.name || 'Untitled Item',
           headerRight: () => (
             <Pressable
-              style={styles.saveButton}
+              style={[styles.saveButton, hasUnsavedChanges && styles.saveButtonHighlight]}
               onPress={handleSaveItem}
             >
-              <Save size={24} color="#007AFF" />
+              <Save size={24} color={hasUnsavedChanges ? "#FF3B30" : "#007AFF"} />
             </Pressable>
           ),
         }}
@@ -158,5 +171,9 @@ const styles = StyleSheet.create({
   saveButton: {
     padding: 8,
     marginRight: 8,
+  },
+  saveButtonHighlight: {
+    backgroundColor: '#FFE5E5',
+    borderRadius: 8,
   },
 });

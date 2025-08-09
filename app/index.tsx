@@ -66,14 +66,13 @@ export default function ItemsScreen() {
                 gap: 10,
               }}
             >
-              {/* <Text style={{ fontSize: 16 }}>Sync</Text> */}
-              {/* <Switch
+              <Text style={{ fontSize: 16, marginRight: 8 }}>Auto Sync</Text>
+              <Switch
                 value={isSyncing}
-                onValueChange={() => {
-                  // toggleSync(!isSyncing);
-                  
+                onValueChange={(enabled) => {
+                  toggleSync(enabled);
                 }}
-              /> */}
+              />
               <Pressable
                 style={styles.syncButton}
                 onPress={handlePullFromRemote}

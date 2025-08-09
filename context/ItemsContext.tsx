@@ -66,40 +66,46 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
     const items = await db.getAllAsync<Item>(
       'SELECT * FROM items ORDER BY name ASC'
     );
-    console.log(`📋 Found ${items.length} items in local database`);
+    console.log(`📋 Found ${items.length} items in local database:`, items.map(item => ({ id: item.id, name: item.name || 'EMPTY' })));
     setItems(items);
   }, [db]);
 
   const syncItems = useCallback(async () => {
-    console.log('Syncing items with Turso DB...');
+    console.log('🔄 Syncing items with Turso DB...');
+    const startTime = Date.now();
 
     try {
       await db.syncLibSQL();
       await fetchItems();
-      console.log('Synced items with Turso DB');
+      const duration = Date.now() - startTime;
+      console.log(`✅ Synced items with Turso DB (${duration}ms)`);
     } catch (e) {
-      console.log(e);
+      console.log('❌ Sync failed:', e);
     }
   }, [db, fetchItems]);
 
   const pullFromRemote = useCallback(async () => {
-    console.log('Pulling changes from remote Turso DB...');
+    console.log('⬇️ Pulling changes from remote Turso DB...');
+    const startTime = Date.now();
     try {
       await db.syncLibSQL();
       await fetchItems();
-      console.log('Successfully pulled changes from remote');
+      const duration = Date.now() - startTime;
+      console.log(`✅ Successfully pulled changes from remote (${duration}ms)`);
     } catch (e) {
-      console.log('Error pulling from remote:', e);
+      console.log('❌ Error pulling from remote:', e);
     }
   }, [db, fetchItems]);
 
   const pushToRemote = useCallback(async () => {
-    console.log('Pushing local changes to remote Turso DB...');
+    console.log('⬆️ Pushing local changes to remote Turso DB...');
+    const startTime = Date.now();
     try {
       await db.syncLibSQL();
-      console.log('Successfully pushed local changes to remote');
+      const duration = Date.now() - startTime;
+      console.log(`✅ Successfully pushed local changes to remote (${duration}ms)`);
     } catch (e) {
-      console.log('Error pushing to remote:', e);
+      console.log('❌ Error pushing to remote:', e);
     }
   }, [db]);
 
@@ -107,11 +113,11 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
     async (enabled: boolean) => {
       setIsSyncing(enabled);
       if (enabled) {
-        console.log('Starting sync interval...');
+        console.log('🚀 Starting sync interval (every 10 seconds)...');
         await syncItems(); // Sync immediately when enabled
-        syncIntervalRef.current = setInterval(syncItems, 2000);
+        syncIntervalRef.current = setInterval(syncItems, 10000);
       } else if (syncIntervalRef.current) {
-        console.log('Stopping sync interval...');
+        console.log('⏹️ Stopping sync interval...');
         clearInterval(syncIntervalRef.current);
       }
     },
@@ -143,6 +149,8 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
 
   const updateItem = async (id: string, updates: Partial<Item>) => {
     try {
+      console.log(`🔄 Updating item ${id} with:`, updates);
+      
       // Build dynamic SQL query based on what fields are being updated
       const fields = [];
       const values = [];
@@ -169,16 +177,17 @@ export function ItemsProvider({ children }: { children: React.ReactNode }) {
       
       values.push(id);
 
-      await db.runAsync(
-        `UPDATE items SET ${fields.join(', ')} WHERE id = ?`,
-        ...values
-      );
+      const updateQuery = `UPDATE items SET ${fields.join(', ')} WHERE id = ?`;
+      console.log(`🔍 Executing query: ${updateQuery}`, values);
+
+      const result = await db.runAsync(updateQuery, ...values);
+      console.log(`✅ Update result:`, result);
 
       // Always refetch to ensure UI is in sync with database
       await fetchItems();
-      console.log('Item updated and list refreshed');
+      console.log('✅ Item updated and list refreshed');
     } catch (error) {
-      console.error('Error updating item:', error);
+      console.error('❌ Error updating item:', error);
       // Fallback to refetch on error
       fetchItems();
     }
