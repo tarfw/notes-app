@@ -11,38 +11,47 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { Plus, Search, X } from 'lucide-react-native';
-import { SwipeableNote } from '../components/SwipeableNote';
-import { useNotes } from '../context/NotesContext';
+import { Plus, Search, X, ArrowUpCircle, ArrowDownCircle } from 'lucide-react-native';
+import { SwipeableItem } from '../components/SwipeableItem';
+import { useItems } from '../context/ItemsContext';
 
-export default function NotesScreen() {
+export default function ItemsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
-  const { notes, createNote, deleteNote, isSyncing, toggleSync, syncNotes } =
-    useNotes();
+  const { items, createItem, deleteItem, isSyncing, toggleSync, pullFromRemote, pushToRemote } =
+    useItems();
 
-  const filteredNotes = notes.filter(
-    (note) =>
-      note.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredItems = items.filter(
+    (item) =>
+      item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateNote = async () => {
-    console.log('Creating note...');
-    const newNote = await createNote();
-    if (newNote) {
-      router.push(`/note/${newNote.id}`);
+  const handlePullFromRemote = async () => {
+    console.log('Pulling changes from remote...');
+    await pullFromRemote();
+  };
+
+  const handlePushToRemote = async () => {
+    console.log('Pushing local changes to remote...');
+    await pushToRemote();
+  };
+
+  const handleCreateItem = async () => {
+    console.log('Creating item...');
+    const newItem = await createItem();
+    if (newItem) {
+      router.push(`/item/${newItem.id}` as any);
     } else {
-      alert('Failed to create note');
+      alert('Failed to create item');
     }
   };
 
-  const renderNote = ({ item }: any) => (
-    <SwipeableNote
-      note={item}
-      onPress={() => router.push(`/note/${item.id}`)}
-      onDelete={() => deleteNote(item.id)}
+  const renderItem = ({ item }: any) => (
+    <SwipeableItem
+      item={item}
+      onPress={() => router.push(`/item/${item.id}` as any)}
+      onDelete={() => deleteItem(item.id)}
     />
   );
   return (
@@ -65,15 +74,26 @@ export default function NotesScreen() {
                   
                 }}
               /> */}
-              <Button title="Pull" onPress={() => syncNotes()} />
+              <Pressable
+                style={styles.syncButton}
+                onPress={handlePullFromRemote}
+              >
+                <ArrowDownCircle size={24} color="#007AFF" />
+              </Pressable>
+              <Pressable
+                style={styles.syncButton}
+                onPress={handlePushToRemote}
+              >
+                <ArrowUpCircle size={24} color="#007AFF" />
+              </Pressable>
             </View>
           ),
         }}
       />
-      <Animated.View entering={FadeIn} style={styles.notesList}>
+      <View style={styles.itemsList}>
         <FlatList
-          data={filteredNotes}
-          renderItem={renderNote}
+          data={filteredItems}
+          renderItem={renderItem}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={() => (
             <View style={styles.headerContainer}>
@@ -96,10 +116,10 @@ export default function NotesScreen() {
           contentContainerStyle={styles.listContent}
           contentInsetAdjustmentBehavior="automatic"
         />
-        <Pressable style={styles.fab} onPress={handleCreateNote}>
+        <Pressable style={styles.fab} onPress={handleCreateItem}>
           <Plus size={24} color="#FFFFFF" />
         </Pressable>
-      </Animated.View>
+      </View>
     </>
   );
 }
@@ -131,8 +151,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#000',
   },
-  notesList: {
+  itemsList: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  syncButton: {
+    padding: 8,
+    marginLeft: 4,
+    marginRight: 4,
   },
   listContent: {
     paddingBottom: 100, // Extra padding for FAB
@@ -147,13 +173,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
 });

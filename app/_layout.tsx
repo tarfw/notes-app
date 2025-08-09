@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DB_NAME, NotesProvider, tursoOptions } from '../context/NotesContext';
+import { DB_NAME, ItemsProvider, tursoOptions } from '../context/ItemsContext';
 import { SQLiteDatabase, SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'react-native';
 
@@ -26,7 +26,7 @@ export default function RootLayout() {
         }
 
         // Define the target database version.
-        const DATABASE_VERSION = 1;
+        const DATABASE_VERSION = 2;
 
         // PRAGMA is a special command in SQLite used to query or modify database settings. For example, PRAGMA user_version retrieves or sets a custom schema version number, helping you track migrations.
         // Retrieve the current database version using PRAGMA.
@@ -46,20 +46,33 @@ export default function RootLayout() {
           // Note: libSQL does not support WAL (Write-Ahead Logging) mode.
           // await db.execAsync(`PRAGMA journal_mode = 'wal';`);
 
-          // Create the 'notes' table with three columns:
+          // Create the 'items' table with new columns:
           // - id: an integer primary key that cannot be null.
-          // - title: a text column.
-          // - content: a text column.
-          // - modifiedDate: a text column.
+          // - image: a text column for image URL/path.
+          // - barcode: a text column for barcode.
+          // - name: a text column for item name.
+          // - qty: an integer column for quantity/stock on hand.
           await db.execAsync(
-            `CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY NOT NULL, title TEXT, content TEXT, modifiedDate TEXT);`
+            `CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY NOT NULL, image TEXT, barcode TEXT, name TEXT, qty INTEGER);`
           );
           console.log(
             'Initial migration applied, DB version:',
             DATABASE_VERSION
           );
           // Update the current version after applying the initial migration.
-          currentDbVersion = 1;
+          currentDbVersion = 2;
+        } else if (currentDbVersion === 1) {
+          // Migration from notes to items table
+          console.log('Migrating from notes to items table...');
+          
+          // Drop old notes table and create new items table
+          await db.execAsync(`DROP TABLE IF EXISTS notes;`);
+          await db.execAsync(
+            `CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY NOT NULL, image TEXT, barcode TEXT, name TEXT, qty INTEGER);`
+          );
+          
+          console.log('Migration to items table completed, DB version:', DATABASE_VERSION);
+          currentDbVersion = 2;
         } else {
           console.log('DB version:', currentDbVersion);
         }
@@ -74,12 +87,12 @@ export default function RootLayout() {
         await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
       }}
     >
-      <NotesProvider>
+      <ItemsProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <Stack
             screenOptions={{
               headerShown: false,
-              animation: 'slide_from_right',
+              animation: 'none',
               gestureEnabled: true,
             }}
           >
@@ -88,11 +101,11 @@ export default function RootLayout() {
               options={{
                 headerShown: true,
                 headerLargeTitle: true,
-                headerTitle: 'Notes',
+                headerTitle: 'Items',
               }}
             />
             <Stack.Screen
-              name="note/[id]"
+              name="item/[id]"
               options={{
                 headerShown: true,
               }}
@@ -100,7 +113,7 @@ export default function RootLayout() {
           </Stack>
           <StatusBar barStyle={'dark-content'} />
         </GestureHandlerRootView>
-      </NotesProvider>
+      </ItemsProvider>
     </SQLiteProvider>
   );
 }
