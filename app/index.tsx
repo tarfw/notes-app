@@ -28,10 +28,10 @@ export default function ItemsScreen() {
     .filter(item => item?.id) // Only include items with valid IDs
     .filter(
       (item) =>
-        item.itemid?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.notes?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.locationid?.toLowerCase().includes(searchQuery.toLowerCase())
+        item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.barcode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.status?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   // Calculate table size
@@ -40,10 +40,9 @@ export default function ItemsScreen() {
       try {
         // Get table size from SQLite system tables
         const result = await db.getFirstAsync<{ size: number }>(
-          `SELECT SUM(LENGTH(id) + LENGTH(COALESCE(itemid, '')) + LENGTH(COALESCE(locationid, '')) + 
-           LENGTH(COALESCE(type, '')) + LENGTH(COALESCE(refid, '')) + LENGTH(COALESCE(userid, '')) + 
-           LENGTH(COALESCE(notes, '')) + LENGTH(COALESCE(status, '')) + 
-           LENGTH(COALESCE(created_at, '')) + 40) as size FROM ilogs`
+          `SELECT SUM(LENGTH(id) + LENGTH(COALESCE(name, '')) + LENGTH(COALESCE(sku, '')) + 
+           LENGTH(COALESCE(barcode, '')) + LENGTH(COALESCE(status, '')) + LENGTH(COALESCE(options, '')) + 
+           LENGTH(COALESCE(created, '')) + LENGTH(COALESCE(updated, '')) + 40) as size FROM items`
         );
         
         if (result && result.size) {

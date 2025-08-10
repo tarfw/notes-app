@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, TextInput, Pressable, Text } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ILog, useItems } from '../../context/ItemsContext';
+import { Item, useItems } from '../../context/ItemsContext';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Save } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,17 +12,11 @@ export default function ItemScreen() {
   const router = useRouter();
   const { items, updateItem, saveItem, deleteItem, startEditMode, endEditMode } = useItems();
   const [item, setItem] = useState({ 
-    itemid: '', 
-    locationid: '', 
-    type: '', 
-    qty: 0,
-    refid: '',
-    pqty: 0,
-    nqty: 0,
-    cqty: 0,
-    userid: '',
-    notes: '',
-    status: 'active'
+    name: '', 
+    sku: '', 
+    barcode: '', 
+    status: 'active',
+    options: '{}'
   });
   const originalItemRef = useRef<typeof item | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -30,24 +24,18 @@ export default function ItemScreen() {
 
   useEffect(() => {
     const fetchItem = async () => {
-      const numericId = Number(id);
+      const itemId = id as string;
       
-      // First check if it's a pending item (negative ID)
-      if (numericId < 0) {
-        const pendingItem = items.find(item => item.id === numericId);
+      // First check if it's a pending item (temp ID)
+      if (itemId.startsWith('temp_')) {
+        const pendingItem = items.find(item => item.id === itemId);
         if (pendingItem) {
           const itemData = {
-            itemid: pendingItem.itemid || '',
-            locationid: pendingItem.locationid || '',
-            type: pendingItem.type || '',
-            qty: pendingItem.qty || 0,
-            refid: pendingItem.refid || '',
-            pqty: pendingItem.pqty || 0,
-            nqty: pendingItem.nqty || 0,
-            cqty: pendingItem.cqty || 0,
-            userid: pendingItem.userid || '',
-            notes: pendingItem.notes || '',
-            status: pendingItem.status || 'active'
+            name: pendingItem.name || '',
+            sku: pendingItem.sku || '',
+            barcode: pendingItem.barcode || '',
+            status: pendingItem.status || 'active',
+            options: pendingItem.options || '{}'
           };
           setItem(itemData);
           originalItemRef.current = itemData;
@@ -58,32 +46,25 @@ export default function ItemScreen() {
       }
       
       // Otherwise fetch from database
-      const currentItem = await db.getFirstAsync<ILog>(
-        'SELECT * FROM ilogs WHERE id = ?',
-        [numericId]
+      const currentItem = await db.getFirstAsync<Item>(
+        'SELECT * FROM items WHERE id = ?',
+        [itemId]
       );
       if (currentItem) {
         const itemData = {
-          itemid: currentItem.itemid || '',
-          locationid: currentItem.locationid || '',
-          type: currentItem.type || '',
-          qty: currentItem.qty || 0,
-          refid: currentItem.refid || '',
-          pqty: currentItem.pqty || 0,
-          nqty: currentItem.nqty || 0,
-          cqty: currentItem.cqty || 0,
-          userid: currentItem.userid || '',
-          notes: currentItem.notes || '',
-          status: currentItem.status || 'active'
+          name: currentItem.name || '',
+          sku: currentItem.sku || '',
+          barcode: currentItem.barcode || '',
+          status: currentItem.status || 'active',
+          options: currentItem.options || '{}'
         };
         setItem(itemData);
         originalItemRef.current = itemData;
         setHasUnsavedChanges(false);
         
         // Check if this is a newly created empty item
-        const isEmpty = !currentItem.itemid && !currentItem.locationid && 
-                       !currentItem.type && !currentItem.refid && 
-                       !currentItem.userid && !currentItem.notes;
+        const isEmpty = !currentItem.name && !currentItem.sku && 
+                       !currentItem.barcode && currentItem.options === '{}';
         setIsNewItem(isEmpty);
       }
     };
@@ -104,43 +85,27 @@ export default function ItemScreen() {
   // Handle back button press to clean up empty items
   const handleBackPress = () => {
     if (isNewItem && !hasUnsavedChanges) {
-      const isEmpty = !item.itemid && !item.locationid && 
-                     !item.type && !item.refid && 
-                     !item.userid && !item.notes;
+      const isEmpty = !item.name && !item.sku && 
+                     !item.barcode && item.options === '{}';
       if (isEmpty) {
-        deleteItem(Number(id));
+        deleteItem(id as string);
       }
     }
     router.back();
   };
 
-  const handleItemIdChange = (itemid: string) => {
-    setItem((prev) => ({ ...prev, itemid }));
+  const handleNameChange = (name: string) => {
+    setItem((prev) => ({ ...prev, name }));
     setHasUnsavedChanges(true);
   };
 
-  const handleLocationIdChange = (locationid: string) => {
-    setItem((prev) => ({ ...prev, locationid }));
+  const handleSkuChange = (sku: string) => {
+    setItem((prev) => ({ ...prev, sku }));
     setHasUnsavedChanges(true);
   };
 
-  const handleTypeChange = (type: string) => {
-    setItem((prev) => ({ ...prev, type }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleRefIdChange = (refid: string) => {
-    setItem((prev) => ({ ...prev, refid }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleUserIdChange = (userid: string) => {
-    setItem((prev) => ({ ...prev, userid }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleNotesChange = (notes: string) => {
-    setItem((prev) => ({ ...prev, notes }));
+  const handleBarcodeChange = (barcode: string) => {
+    setItem((prev) => ({ ...prev, barcode }));
     setHasUnsavedChanges(true);
   };
 
@@ -149,45 +114,20 @@ export default function ItemScreen() {
     setHasUnsavedChanges(true);
   };
 
-  const handleQtyChange = (qtyText: string) => {
-    const qty = parseInt(qtyText) || 0;
-    setItem((prev) => ({ ...prev, qty }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handlePqtyChange = (pqtyText: string) => {
-    const pqty = parseInt(pqtyText) || 0;
-    setItem((prev) => ({ ...prev, pqty }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleNqtyChange = (nqtyText: string) => {
-    const nqty = parseInt(nqtyText) || 0;
-    setItem((prev) => ({ ...prev, nqty }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleCqtyChange = (cqtyText: string) => {
-    const cqty = parseInt(cqtyText) || 0;
-    setItem((prev) => ({ ...prev, cqty }));
+  const handleOptionsChange = (options: string) => {
+    setItem((prev) => ({ ...prev, options }));
     setHasUnsavedChanges(true);
   };
 
   const handleSaveItem = async () => {
     try {
       // Use saveItem for both new and existing items
-      const savedId = await saveItem(Number(id), { 
-        itemid: item.itemid, 
-        locationid: item.locationid,
-        type: item.type,
-        qty: item.qty,
-        refid: item.refid,
-        pqty: item.pqty,
-        nqty: item.nqty,
-        cqty: item.cqty,
-        userid: item.userid,
-        notes: item.notes,
-        status: item.status
+      const savedId = await saveItem(id as string, { 
+        name: item.name, 
+        sku: item.sku,
+        barcode: item.barcode,
+        status: item.status,
+        options: item.options
       });
       
       setHasUnsavedChanges(false);
@@ -206,7 +146,7 @@ export default function ItemScreen() {
     <>
       <Stack.Screen
         options={{
-          headerTitle: item.itemid || 'Untitled Item',
+          headerTitle: item.name || 'Untitled Item',
           headerLeft: () => (
             <Pressable onPress={handleBackPress}>
               <Text style={{ color: '#007AFF', fontSize: 17 }}>Back</Text>
@@ -226,77 +166,31 @@ export default function ItemScreen() {
         <View style={styles.content}>
           <TextInput
             style={styles.nameInput}
-            value={item.itemid}
-            onChangeText={handleItemIdChange}
-            placeholder="Item ID"
+            value={item.name}
+            onChangeText={handleNameChange}
+            placeholder="Item Name"
             placeholderTextColor="#8E8E93"
             autoFocus
           />
           <TextInput
             style={styles.input}
-            value={item.locationid}
-            onChangeText={handleLocationIdChange}
-            placeholder="Location ID"
+            value={item.sku}
+            onChangeText={handleSkuChange}
+            placeholder="SKU"
             placeholderTextColor="#8E8E93"
           />
           <TextInput
             style={styles.input}
-            value={item.type}
-            onChangeText={handleTypeChange}
-            placeholder="Type"
+            value={item.barcode}
+            onChangeText={handleBarcodeChange}
+            placeholder="Barcode"
             placeholderTextColor="#8E8E93"
           />
           <TextInput
             style={styles.input}
-            value={item.qty.toString()}
-            onChangeText={handleQtyChange}
-            placeholder="Current Quantity"
-            placeholderTextColor="#8E8E93"
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.refid}
-            onChangeText={handleRefIdChange}
-            placeholder="Reference ID"
-            placeholderTextColor="#8E8E93"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.pqty.toString()}
-            onChangeText={handlePqtyChange}
-            placeholder="Previous Quantity"
-            placeholderTextColor="#8E8E93"
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.nqty.toString()}
-            onChangeText={handleNqtyChange}
-            placeholder="New Quantity"
-            placeholderTextColor="#8E8E93"
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.cqty.toString()}
-            onChangeText={handleCqtyChange}
-            placeholder="Committed Quantity"
-            placeholderTextColor="#8E8E93"
-            keyboardType="numeric"
-          />
-          <TextInput
-            style={styles.input}
-            value={item.userid}
-            onChangeText={handleUserIdChange}
-            placeholder="User ID"
-            placeholderTextColor="#8E8E93"
-          />
-          <TextInput
-            style={[styles.input, styles.notesInput]}
-            value={item.notes}
-            onChangeText={handleNotesChange}
-            placeholder="Notes"
+            value={item.options}
+            onChangeText={handleOptionsChange}
+            placeholder="Options (JSON)"
             placeholderTextColor="#8E8E93"
             multiline
             numberOfLines={3}
@@ -320,38 +214,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   content: {
-    flex: 1,
     padding: 16,
-    backgroundColor: '#FFFFFF',
   },
   nameInput: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#000',
-    marginBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
-    paddingBottom: 8,
+    paddingVertical: 12,
+    marginBottom: 24,
   },
   input: {
     fontSize: 17,
     color: '#000',
-    marginBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
-    paddingBottom: 8,
+    paddingVertical: 12,
+    marginBottom: 16,
   },
   saveButton: {
     padding: 8,
-    marginRight: 8,
   },
   saveButtonHighlight: {
     backgroundColor: '#FFE5E5',
     borderRadius: 8,
-  },
-  notesInput: {
-    height: 80,
-    textAlignVertical: 'top',
-    paddingTop: 8,
   },
 });

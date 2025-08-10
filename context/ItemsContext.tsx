@@ -15,20 +15,15 @@ if (
   throw new Error('Turso DB URL and Auth Token must be set in .env.local');
 }
 
-export interface ILog {
-  id: number;
-  itemid: string | null;
-  locationid: string | null;
-  type: string | null;
-  qty: number | null;
-  refid: string | null;
-  pqty: number | null;  // previous quantity
-  nqty: number | null;  // new quantity
-  cqty: number | null;  // committed quantity
-  userid: string | null;
-  notes: string | null;
-  status: string | null;
-  created_at: string | null;
+export interface Item {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  status: string;
+  options: string; // JSON string
+  created: string;
+  updated: string;
 }
 
 export const DB_NAME = 'items-app-db.db';
@@ -38,12 +33,12 @@ export const tursoOptions = {
   authToken: process.env.EXPO_PUBLIC_TURSO_DB_AUTH_TOKEN,
 };
 
-interface ILogsContextType {
-  items: ILog[];
-  createItem: () => Promise<ILog | undefined>;
-  updateItem: (id: number, updates: Partial<ILog>) => void;
-  saveItem: (id: number, itemData: Partial<ILog>) => Promise<string>;
-  deleteItem: (id: number) => void;
+interface ItemsContextType {
+  items: Item[];
+  createItem: () => Promise<Item | undefined>;
+  updateItem: (id: string, updates: Partial<Item>) => void;
+  saveItem: (id: string, itemData: Partial<Item>) => Promise<string>;
+  deleteItem: (id: string) => void;
   pullFromRemote: () => void;
   pushToRemote: () => void;
   toggleSync: (enabled: boolean) => void;
@@ -54,14 +49,14 @@ interface ILogsContextType {
   syncPendingDeletions: () => Promise<void>;
 }
 
-const ILogsContext = createContext<ILogsContextType | null>(null);
+const ItemsContext = createContext<ItemsContextType | null>(null);
 
-export function ILogsProvider({ children }: { children: React.ReactNode }) {
+export function ItemsProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
   
   // Separate state for UI items and sync control
-  const [uiItems, setUiItems] = useState<ILog[]>([]);
-  const [pendingItems, setPendingItems] = useState<Map<string, ILog>>(new Map());
+  const [uiItems, setUiItems] = useState<Item[]>([]);
+  const [pendingItems, setPendingItems] = useState<Map<string, Item>>(new Map());
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasPendingDeletions, setHasPendingDeletions] = useState(false);
   
@@ -69,7 +64,7 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   const syncIntervalRef = useRef<NodeJS.Timeout>();
   const isEditingRef = useRef(false);
   const syncQueueRef = useRef<Set<string>>(new Set());
-  const deletedItemsRef = useRef<Set<number>>(new Set());
+  const deletedItemsRef = useRef<Set<string>>(new Set());
 
   // Initial data load
   useEffect(() => {
@@ -79,8 +74,8 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   // Load items from database without affecting UI state during editing
   const loadItemsFromDB = useCallback(async () => {
     try {
-      const items = await db.getAllAsync<ILog>(
-        'SELECT * FROM ilogs ORDER BY created_at DESC'
+      const items = await db.getAllAsync<Item>(
+        'SELECT * FROM items ORDER BY created DESC'
       );
       
       // Only update UI if not currently editing
@@ -107,8 +102,8 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
       console.log('Background sync completed successfully');
       
       // Load fresh data but don't update UI if editing
-      const items = await db.getAllAsync<ILog>(
-        'SELECT * FROM ilogs ORDER BY created_at DESC'
+      const items = await db.getAllAsync<Item>(
+        'SELECT * FROM items ORDER BY created DESC'
       );
       
       if (!isEditingRef.current) {
@@ -150,22 +145,17 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
 
   // Create new item (local only, no DB insertion)
   const createItem = useCallback(async () => {
-    const tempId = -(Date.now() + Math.floor(Math.random() * 1000)); // Negative number for temp items
+    const tempId = `temp_${Date.now()}_${Math.floor(Math.random() * 1000)}`; // String ID for temp items
     
-    const newItem: ILog = {
+    const newItem: Item = {
       id: tempId,
-      itemid: '',
-      locationid: '',
-      type: '',
-      qty: 0,
-      refid: '',
-      pqty: 0,
-      nqty: 0,
-      cqty: 0,
-      userid: '',
-      notes: '',
+      name: '',
+      sku: '',
+      barcode: '',
       status: 'active',
-      created_at: new Date().toISOString(),
+      options: '{}', // Empty JSON object
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
     };
 
     setPendingItems(prev => new Map(prev).set(tempId.toString(), newItem));
@@ -174,14 +164,14 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Update item (local state only during editing)
-  const updateItem = useCallback((id: number, updates: Partial<ILog>) => {
-    if (id < 0) {
-      // Update pending item (negative ID)
+  const updateItem = useCallback((id: string, updates: Partial<Item>) => {
+    if (id.startsWith('temp_')) {
+      // Update pending item (temp ID)
       setPendingItems(prev => {
         const newMap = new Map(prev);
-        const existingItem = newMap.get(id.toString());
+        const existingItem = newMap.get(id);
         if (existingItem) {
-          newMap.set(id.toString(), { ...existingItem, ...updates });
+          newMap.set(id, { ...existingItem, ...updates });
         }
         return newMap;
       });
@@ -194,60 +184,60 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Save item to database (only called when user explicitly saves)
-  const saveItem = useCallback(async (id: number, itemData: Partial<ILog>): Promise<string> => {
+  const saveItem = useCallback(async (id: string, itemData: Partial<Item>): Promise<string> => {
     try {
-      if (id < 0) {
-        // Insert new item (negative ID)
+      if (id.startsWith('temp_')) {
+        // Insert new item (temp ID)
+        const realId = `item_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const now = new Date().toISOString();
         const result = await db.runAsync(
-          'INSERT INTO ilogs (itemid, locationid, type, qty, refid, pqty, nqty, cqty, userid, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          itemData.itemid || '',
-          itemData.locationid || '',
-          itemData.type || '',
-          itemData.qty || 0,
-          itemData.refid || '',
-          itemData.pqty || 0,
-          itemData.nqty || 0,
-          itemData.cqty || 0,
-          itemData.userid || '',
-          itemData.notes || '',
-          itemData.status || 'active'
+          'INSERT INTO items (id, name, sku, barcode, status, options, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          realId,
+          itemData.name || '',
+          itemData.sku || '',
+          itemData.barcode || '',
+          itemData.status || 'active',
+          itemData.options || '{}',
+          now,
+          now
         );
-        
-        const realId = result.lastInsertRowId;
         
         // Remove from pending
         setPendingItems(prev => {
           const newMap = new Map(prev);
-          newMap.delete(id.toString());
+          newMap.delete(id);
           return newMap;
         });
         
         // Add to sync queue for later
-        syncQueueRef.current.add(realId.toString());
+        syncQueueRef.current.add(realId);
         
-        return realId.toString();
+        return realId;
       } else {
         // Update existing item
         const fields: string[] = [];
         const values: any[] = [];
         
         Object.entries(itemData).forEach(([key, value]) => {
-          if (value !== undefined && key !== 'id' && key !== 'created_at') {
+          if (value !== undefined && key !== 'id' && key !== 'created') {
             fields.push(`${key} = ?`);
             values.push(value);
           }
         });
         
         if (fields.length > 0) {
+          // Add updated timestamp
+          fields.push('updated = ?');
+          values.push(new Date().toISOString());
           values.push(id);
-          const updateQuery = `UPDATE ilogs SET ${fields.join(', ')} WHERE id = ?`;
+          const updateQuery = `UPDATE items SET ${fields.join(', ')} WHERE id = ?`;
           await db.runAsync(updateQuery, ...values);
           
           // Add to sync queue
-          syncQueueRef.current.add(id.toString());
+          syncQueueRef.current.add(id);
         }
         
-        return id.toString();
+        return id;
       }
     } catch (error) {
       console.error('Error saving item:', error);
@@ -256,7 +246,7 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   }, [db]);
 
   // Delete item
-  const deleteItem = useCallback(async (id: number) => {
+  const deleteItem = useCallback(async (id: string) => {
     // Validate ID parameter
     if (id === undefined || id === null) {
       console.error('Delete failed: Valid ID is required, received:', id);
@@ -264,16 +254,16 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      if (id < 0) {
-        // Remove pending item (negative ID)
+      if (id.startsWith('temp_')) {
+        // Remove pending item (temp ID)
         setPendingItems(prev => {
           const newMap = new Map(prev);
-          newMap.delete(id.toString());
+          newMap.delete(id);
           return newMap;
         });
       } else {
         // Delete from database
-        await db.runAsync('DELETE FROM ilogs WHERE id = ?', id);
+        await db.runAsync('DELETE FROM items WHERE id = ?', id);
         
         // Update UI immediately
         setUiItems(prev => prev.filter(item => item.id !== id));
@@ -374,7 +364,7 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <ILogsContext.Provider
+    <ItemsContext.Provider
       value={{
         items: allItems,
         createItem,
@@ -392,14 +382,14 @@ export function ILogsProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </ILogsContext.Provider>
+    </ItemsContext.Provider>
   );
 }
 
 export function useItems() {
-  const context = useContext(ILogsContext);
+  const context = useContext(ItemsContext);
   if (!context) {
-    throw new Error('useItems must be used within an ILogsProvider');
+    throw new Error('useItems must be used within an ItemsProvider');
   }
   return context;
 }

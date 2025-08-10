@@ -4,24 +4,19 @@ import { Trash2 } from 'lucide-react-native';
 
 LogBox.ignoreAllLogs(); // YOLO
 
-interface ILog {
-  id: number;
-  itemid: string | null;
-  locationid: string | null;
-  type: string | null;
-  qty: number | null;
-  refid: string | null;
-  pqty: number | null;
-  nqty: number | null;
-  cqty: number | null;
-  userid: string | null;
-  notes: string | null;
-  status: string | null;
-  created_at: string | null;
+interface Item {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  status: string;
+  options: string; // JSON string
+  created: string;
+  updated: string;
 }
 
 interface Props {
-  item: ILog;
+  item: Item;
   onPress: () => void;
   onDelete: () => void;
 }
@@ -37,17 +32,17 @@ export function SwipeableItem({ item, onPress, onDelete }: Props) {
       >
         <View style={styles.content}>
           <Text style={styles.itemName}>
-            {item.itemid || 'Untitled Item'}
+            {item.name || 'Untitled Item'}
           </Text>
           <Text style={styles.itemBarcode}>
-            Type: {item.type || 'No type'} | Location: {item.locationid || 'No location'}
+            SKU: {item.sku || 'No SKU'} | Barcode: {item.barcode || 'No barcode'}
           </Text>
           <Text style={styles.itemQty}>
-            Qty: {item.qty || 0} | Status: {item.status || 'No status'}
+            Status: {item.status || 'No status'}
           </Text>
-          {item.notes && (
+          {item.options && item.options !== '{}' && (
             <Text style={styles.itemNotes}>
-              Notes: {item.notes}
+              Options: {item.options}
             </Text>
           )}
         </View>
